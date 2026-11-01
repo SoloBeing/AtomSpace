@@ -13,7 +13,7 @@ AtomSpace/
 │   ├── README.md                 # step-by-step setup + common failures
 │   ├── environment.yml           # conda: python 3.11, CUDA 12.8 toolkit, ffmpeg, faiss, cython
 │   ├── requirements-gpu.txt      # torch/torchvision from the cu128 index (Turing → Blackwell)
-│   ├── setup_wsl.sh              # checks GPU (≥ sm_75, ≥ 8 GB), builds ASMK, curope, gsplat for the detected arch
+│   ├── setup_wsl.sh              # checks GPU (≥ sm_75, ≥ 4 GB), builds ASMK, curope, gsplat for the detected arch
 │   ├── download_weights.sh       # MASt3R + retrieval checkpoints → checkpoints/
 │   └── smoke_test.py             # GPU/arch/profile check, gsplat forward+backward, MASt3R inference
 │

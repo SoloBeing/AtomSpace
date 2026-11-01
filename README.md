@@ -1,14 +1,12 @@
 # AtomSpace
 
-Turns a smartphone video of an indoor space into a photorealistic 3D web scene you can walk through in first person, from any browser. No depth sensor, scanning rig or app install is needed.
+Got a phone and a room? Walk around filming for a minute or two, run one command, and step inside your own space in the browser. AtomSpace is still in its early stages, so expect a few rough edges!
 
 **[Try the live demo](https://atomspace-deploy.vercel.app/?scene=friendroom-r30)** (about 35 MB; WASD and mouse on a laptop, touch controls on a phone)
 
 | Level view | Tilted-down view |
 |---|---|
 | ![A reconstructed room in the web viewer, seen at eye level](docs/images/room-level.png) | ![The same room seen from a downward angle](docs/images/room-down.png) |
-
-*The submitted room in the web viewer: 1.08M Gaussians in a 33 MB file.*
 
 ## How it works
 
@@ -46,22 +44,34 @@ Built for a hackathon. Capture, reconstruction and free roaming are complete.
 | ARKit/LiDAR fast track | Designed, not implemented (`sensor_track.py` raises `NotImplementedError`) |
 | Pathfinding, phone-camera AR navigation | Planned |
 
-Measured on the test room (101 keyframes):
+## Results
 
-| Stage | Hardware | Time | Peak GPU memory |
+One command took a 90-second, 1080p phone video to a viewable scene in 75 minutes, on a laptop RTX 2050 with 4 GB of VRAM under WSL2. That scene is Room-2 in the live demo.
+
+| Stage | Result | Time | Peak GPU memory |
 |---|---|---|---|
-| Ingest | Laptop | 25 s | None |
-| Reconstruct, 735 pairs with loop pairs | RTX 2050, 4 GB | About 30 min | 4.41 GiB |
-| Splat training, 30,000 steps | Google Colab T4 | 35 min | 0.94 GiB |
+| Ingest | 540 frames down to 101 keyframes | Under 1 min | None |
+| Reconstruct | 735 image pairs, 101 of 101 cameras, 2M dense points | 38 min | 4.41 GiB (PyTorch's figure; `nvidia-smi` read about 3,950 MiB) |
+| Splat | 30,000 steps, 1.5M Gaussians, about 1.16M kept, 37.3 MB file | 36 min | 0.51 GiB |
+| Bundle | Static scene files | Seconds | None |
 
-The 4 GB run was a minimal experiment outside this repository, using selected loop pairs. Its output was 2.2M Gaussians in 71 MB. The supported minimum is 8 GB.
+This run differed from a plain `atomspace run` in a few ways:
+
+- It used reduced settings, the ones now in the `vram_4gb` profile, and bypassed the old 8 GB check. A plain `atomspace run` on 4 GB hasn't been tested yet.
+- ASMK retrieval was replaced by a stand-in, cosine similarity of mean encoder features, because the codebook download was too slow. Real ASMK retrieval hasn't been run on real data yet.
+- Setup needed fixes before this run, so it doesn't show a first-try install.
+- Navmesh was skipped because it needs a metric scale from the user.
+
+We haven't measured image quality (PSNR, SSIM) yet. In this scene, fabrics stay sharp, but walls show blotchy colour patches.
+
+8 GB of VRAM is recommended and 4 GB is the minimum.
 
 ## Setup
 
 ### Requirements
 
 - **Viewer and CPU stages:** Node 20+, Python 3.10+, any modern browser.
-- **GPU stages (`reconstruct`, `splat`):** an NVIDIA GPU from the RTX 20 series or newer with 8 GB+ VRAM, on WSL2 or Linux.
+- **GPU stages (`reconstruct`, `splat`):** an NVIDIA GPU from the RTX 20 series or newer on WSL2 or Linux, with 8 GB of VRAM recommended and 4 GB the minimum.
 
 ### Clone
 

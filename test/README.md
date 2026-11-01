@@ -9,7 +9,7 @@ atomspace splat testroom
 atomspace bundle testroom
 ```
 
-Steps and viewer instructions are in the main [README](../README.md#reconstruct-the-sample-scene). You need a GPU machine with 8 GB+ VRAM for the first two commands.
+Steps and viewer instructions are in the main [README](../README.md#reconstruct-the-sample-scene). You need a GPU machine for the first two commands: 8 GB of VRAM recommended, 4 GB minimum.
 
 Reconstructed from these frames, expect a usable room with a black band at eye level, because the capture was tilted down throughout.
 

@@ -40,5 +40,3 @@ Our changes to these components: none. License summary: <https://creativecommons
 ## Images and sample data
 
 The files in `docs/images/` and `test/` show real rooms and are **not** covered by the MIT License. They are included only so this project can be evaluated and its results reproduced. The architecture diagram in `docs/images/` is the exception and may be reused with the code.
-
-These notices are a summary for convenience. Each component's own license text is what applies.

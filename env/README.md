@@ -1,6 +1,6 @@
 # GPU environment
 
-The GPU stages (`reconstruct`, `splat`) need an NVIDIA card from the RTX 20 series (Turing) or newer with at least 8 GB of VRAM. They run in WSL2 on Windows, or on native Linux. The viewer and CPU stages don't need any of this.
+The GPU stages (`reconstruct`, `splat`) need an NVIDIA card from the RTX 20 series (Turing) or newer with 8 GB of VRAM recommended and 4 GB the minimum. They run in WSL2 on Windows, or on native Linux. The viewer and CPU stages don't need any of this.
 
 ## Setup (once per machine)
 

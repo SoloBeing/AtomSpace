@@ -5,7 +5,8 @@ from pathlib import Path
 
 from .config import PROFILES, Profile
 
-MIN_PROFILE = PROFILES["vram_8gb"]
+MIN_PROFILE = PROFILES["vram_4gb"]
+RECOMMENDED_PROFILE = PROFILES["vram_8gb"]
 
 
 def vram_gib() -> float | None:
@@ -24,10 +25,12 @@ def resolve_profile(name: str | None = None) -> Profile:
         return PROFILES[name]
     vram = vram_gib()
     if vram is None:
-        return MIN_PROFILE
+        return RECOMMENDED_PROFILE  # CPU-only stages: nothing here is limited by this machine
     eligible = [p for p in PROFILES.values() if vram >= p.min_vram_gib]
     if not eligible:
-        raise RuntimeError(f"GPU has {vram:.1f} GiB VRAM; AtomSpace needs at least 8 GB.")
+        raise RuntimeError(f"GPU has {vram:.1f} GiB VRAM; AtomSpace needs at least 4 GB.")
+    if vram < RECOMMENDED_PROFILE.min_vram_gib:
+        print(f"Warning: {vram:.1f} GiB VRAM is below the recommended 8 GB. Using reduced limits; expect it to be slow.")
     return max(eligible, key=lambda p: p.min_vram_gib)
 
 
@@ -35,10 +38,10 @@ def require_gpu() -> None:
     vram = vram_gib()
     if vram is None:
         raise RuntimeError(
-            "This stage needs an NVIDIA GPU (RTX 20 series or newer, 8 GB+). See env/README.md."
+            "This stage needs an NVIDIA GPU (RTX 20 series or newer, 4 GB+, 8 GB recommended). See env/README.md."
         )
     if vram < MIN_PROFILE.min_vram_gib:
-        raise RuntimeError(f"GPU has {vram:.1f} GiB VRAM; AtomSpace needs at least 8 GB.")
+        raise RuntimeError(f"GPU has {vram:.1f} GiB VRAM; AtomSpace needs at least 4 GB.")
 
 
 @contextmanager

@@ -40,7 +40,8 @@ CAP_INT=$(( ${CAP%%.*} * 10 + ${CAP#*.} ))
 echo "    $GPU_NAME | compute capability $CAP | ${MEM_MIB} MiB"
 
 (( CAP_INT >= 75 )) || die "Compute capability $CAP is too old. Minimum is 7.5 (RTX 20 series / Turing)."
-(( MEM_MIB >= 7600 )) || die "Only ${MEM_MIB} MiB VRAM. Minimum supported is 8 GB."
+(( MEM_MIB >= 3500 )) || die "Only ${MEM_MIB} MiB VRAM. Minimum is 4 GB; 8 GB is recommended."
+(( MEM_MIB >= 7600 )) || echo "    WARNING: ${MEM_MIB} MiB VRAM is below the recommended 8 GB." >&2
 export TORCH_CUDA_ARCH_LIST="$CAP"
 # Parallel nvcc jobs can exhaust WSL2's RAM share and get OOM-killed.
 export MAX_JOBS="${MAX_JOBS:-4}"

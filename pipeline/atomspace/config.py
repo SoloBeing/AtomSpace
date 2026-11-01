@@ -24,9 +24,11 @@ class Profile:
 
 
 # Thresholds sit slightly under the marketed size: an "8 GB" card reports ~7.6-8.0 GiB.
+# vram_4gb holds the settings tested on a 4 GB RTX 2050: 101 keyframes, 735 pairs, 4.41 GiB peak.
 PROFILES: dict[str, Profile] = {
     p.name: p
     for p in (
+        Profile("vram_4gb", 3.5, 101, 5, 3, 2, 1_500_000),
         Profile("vram_8gb", 7.5, 150, 5, 10, 2, 1_500_000),
         Profile("vram_12gb", 11.5, 250, 8, 15, 2, 3_000_000),
         Profile("vram_24gb", 23.0, 400, 10, 20, 1, 6_000_000),

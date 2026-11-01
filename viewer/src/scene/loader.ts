@@ -41,12 +41,55 @@ export interface SceneBundle {
   splatUrl: string;
 }
 
+/** An entry in worlds.json, which sits beside the scene folders. */
+export interface World {
+  scene: string;
+  name: string;
+}
+
 const SCENES_BASE_URL = import.meta.env.VITE_SCENES_BASE_URL ?? '/scenes';
 
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`${res.status} ${res.statusText} for ${url}`);
   return res.json() as Promise<T>;
+}
+
+export function parseWorlds(data: unknown): World[] {
+  const worlds = (data as { worlds?: unknown } | null)?.worlds;
+  if (!Array.isArray(worlds) || worlds.length === 0) throw new Error('worlds.json lists no worlds');
+  for (const world of worlds as Partial<World>[]) {
+    if (typeof world.name !== 'string' || !/^[A-Za-z0-9_-]+$/.test(world.scene ?? '')) {
+      throw new Error(`Bad entry in worlds.json: ${JSON.stringify(world)}`);
+    }
+  }
+  return worlds as World[];
+}
+
+export async function loadWorlds(): Promise<World[]> {
+  return parseWorlds(await fetchJson<unknown>(`${SCENES_BASE_URL}/worlds.json`));
+}
+
+export function thumbnailUrl(world: World): string {
+  return `${SCENES_BASE_URL}/${encodeURIComponent(world.scene)}/bundle/thumbnail.jpg`;
+}
+
+/** Fetches each world's thumbnail so the carousel opens complete. A missing one doesn't count as a failure. */
+export async function preloadThumbnails(worlds: World[], onProgress: (percent: number) => void): Promise<void> {
+  let done = 0;
+  await Promise.all(
+    worlds.map(
+      (world) =>
+        new Promise<void>((resolve) => {
+          const image = new Image();
+          image.onload = image.onerror = () => {
+            onProgress((++done / worlds.length) * 100);
+            resolve();
+          };
+          image.src = thumbnailUrl(world);
+        }),
+    ),
+  );
 }
 
 export async function loadScene(name: string): Promise<SceneBundle> {

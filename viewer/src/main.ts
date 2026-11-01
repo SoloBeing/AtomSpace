@@ -8,12 +8,13 @@ import { isTouchDevice, mountTouchControls } from './controls/touch';
 import { flyTo } from './poi/flyTo';
 import { createPins } from './poi/pins';
 import { createPoiSearch } from './poi/search';
-import { loadScene } from './scene/loader';
+import { loadScene, loadWorlds, preloadThumbnails } from './scene/loader';
 import { createSplatViewer } from './scene/splatRenderer';
 import { mountControlsHint } from './ui/controlsHint';
 import { mountFpsCounter } from './ui/fpsCounter';
 import { mountLoadingScreen } from './ui/loadingScreen';
 import { mountSearchBar } from './ui/searchBar';
+import { mountWorldCarousel, mountWorldsLink } from './ui/worldCarousel';
 
 async function start(app: HTMLElement, sceneName: string, admin: boolean) {
   const loading = mountLoadingScreen(app);
@@ -49,6 +50,8 @@ async function start(app: HTMLElement, sceneName: string, admin: boolean) {
       pins.update(pois);
       search = createPoiSearch(pois);
     });
+  } else {
+    mountWorldsLink(app); // shares the top right corner with the admin panels
   }
 
   viewer.onFrame((dt) => {
@@ -59,12 +62,23 @@ async function start(app: HTMLElement, sceneName: string, admin: boolean) {
   });
 }
 
+async function chooseWorld(app: HTMLElement) {
+  const loading = mountLoadingScreen(app, 'worlds');
+  const worlds = await loadWorlds();
+  await preloadThumbnails(worlds, loading.setProgress);
+  loading.remove();
+  mountWorldCarousel(app, worlds);
+}
+
 const app = document.getElementById('app')!;
 const params = new URLSearchParams(location.search);
 const scene = params.get('scene');
 
 if (!scene) {
-  app.textContent = 'Add ?scene=<name> to the URL.';
+  chooseWorld(app).catch((err) => {
+    console.error(err);
+    app.textContent = 'No worlds found. Add ?scene=<name> to the URL.';
+  });
 } else {
   start(app, scene, params.has('admin')).catch((err) => {
     console.error(err);

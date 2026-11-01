@@ -62,6 +62,138 @@ body {
   transition: width 0.2s ease-out;
 }
 
+.worlds {
+  --card-width: min(560px, 72vw, 85vh);
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  background: #111;
+}
+
+.worlds h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.worlds-carousel {
+  position: relative;
+  width: 100%;
+}
+
+.worlds-track {
+  position: relative; /* card offsets are measured from here */
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  padding: 12px calc(50% - var(--card-width) / 2);
+  box-sizing: border-box;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+
+.worlds-track::-webkit-scrollbar {
+  display: none;
+}
+
+.world-card {
+  position: relative;
+  flex: none;
+  width: var(--card-width);
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #2d4a66, #1a2430);
+  color: inherit;
+  text-decoration: none;
+  scroll-snap-align: center;
+  opacity: 0.55;
+  transform: scale(0.92);
+  transition:
+    opacity 0.2s,
+    transform 0.2s;
+}
+
+.world-card.active,
+.world-card:hover {
+  opacity: 1;
+  transform: none;
+}
+
+.world-card:focus-visible,
+.worlds-link:focus-visible,
+.worlds-carousel button:focus-visible {
+  outline: 2px solid #7ab8ff;
+  outline-offset: 2px;
+}
+
+.world-card img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.world-card span {
+  position: absolute;
+  inset: auto 0 0;
+  padding: 32px 16px 14px;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.75));
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+.worlds-carousel button {
+  position: absolute;
+  top: 50%;
+  z-index: 1;
+  width: 44px;
+  height: 44px;
+  padding: 0 0 4px;
+  border: 1px solid #444;
+  border-radius: 50%;
+  background: rgba(17, 17, 17, 0.85);
+  color: inherit;
+  font: inherit;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+
+.worlds-carousel button:first-child {
+  left: 12px;
+}
+
+.worlds-carousel button:last-child {
+  right: 12px;
+}
+
+.worlds-carousel button:disabled {
+  visibility: hidden;
+}
+
+.worlds-link {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  box-sizing: border-box;
+  padding: 8px 12px;
+  border: 1px solid #444;
+  border-radius: 8px;
+  background: rgba(17, 17, 17, 0.85);
+  color: inherit;
+  text-decoration: none;
+}
+
 .controls-hint {
   position: absolute;
   bottom: 20px;

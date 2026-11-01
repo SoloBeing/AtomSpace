@@ -77,8 +77,10 @@ AtomSpace/
 │       │   └── poiEditor.ts      # place, name and save POIs (needs `npm run dev`)
 │       └── ui/
 │           ├── searchBar.ts
+│           ├── worldCarousel.ts  # chooser at the bare address, and the link back to it
 │           └── styles.css
 │
+├── scenes/worlds.json            # optional: the worlds offered in the carousel
 ├── scenes/<name>/                # one folder per captured space
 │   ├── ingest.json               # video metadata, track, keyframe list
 │   ├── raw/                      # input video                               (gitignored)
@@ -90,7 +92,8 @@ AtomSpace/
 │       ├── manifest.json
 │       ├── scene.splat
 │       ├── navmesh.json          # absent until metric scale is set
-│       └── pois.json
+│       ├── pois.json
+│       └── thumbnail.jpg         # optional: a screenshot for the carousel card
 │
 ├── schemas/                      # contract between pipeline and viewer
 │   ├── manifest.schema.json

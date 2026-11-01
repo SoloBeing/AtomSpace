@@ -8,11 +8,12 @@ const SCENES_DIR = fileURLToPath(new URL('../scenes', import.meta.url));
 const POIS_SCHEMA = fileURLToPath(new URL('../schemas/pois.schema.json', import.meta.url));
 const MAX_POIS_BYTES = 1024 * 1024;
 const CONTENT_TYPES: Record<string, string> = {
+  '.jpg': 'image/jpeg',
   '.json': 'application/json',
   '.splat': 'application/octet-stream',
 };
 
-// Dev only: serves scenes/<name>/bundle/* at /scenes/<name>/bundle/*. Nothing outside bundle/ is exposed.
+// Dev only: serves scenes/worlds.json and scenes/<name>/bundle/*. Nothing else under scenes/ is exposed.
 function serveSceneBundles(): Plugin {
   return {
     name: 'atomspace-scene-bundles',
@@ -21,7 +22,8 @@ function serveSceneBundles(): Plugin {
         const urlPath = decodeURIComponent((req.url ?? '').split('?')[0]);
         const file = resolve(SCENES_DIR, '.' + urlPath);
         const parts = relative(SCENES_DIR, file).split(sep);
-        if (parts.includes('..') || parts.length < 3 || parts[1] !== 'bundle') return next();
+        const isWorldList = parts.length === 1 && parts[0] === 'worlds.json';
+        if (!isWorldList && (parts.includes('..') || parts.length < 3 || parts[1] !== 'bundle')) return next();
         try {
           if (!statSync(file).isFile()) return next();
         } catch {

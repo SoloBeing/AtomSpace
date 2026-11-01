@@ -149,7 +149,18 @@ The viewer is static, so any static host works, and no special headers are neede
 cd viewer && npm run build
 ```
 
-Serve `viewer/dist/` with each scene at `/scenes/<name>/bundle/`, or set `VITE_SCENES_BASE_URL` at build time to host scenes elsewhere. Visitors need `?scene=<name>` in the URL.
+Serve `viewer/dist/` with each scene at `/scenes/<name>/bundle/`, or set `VITE_SCENES_BASE_URL` at build time to host scenes elsewhere.
+
+To offer a choice of worlds, add `worlds.json` beside the scene folders. Visitors to the bare address then get a carousel, while `?scene=<name>` still opens a scene directly:
+
+```json
+{
+  "format_version": 1,
+  "worlds": [{ "scene": "testroom", "name": "Test Room" }]
+}
+```
+
+A world's card shows `bundle/thumbnail.jpg` from its scene, or a plain background if there isn't one. Without `worlds.json`, visitors need `?scene=<name>` in the URL.
 
 ## Tests
 

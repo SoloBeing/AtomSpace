@@ -49,7 +49,7 @@ export function mountWorldCarousel(container: HTMLElement, worlds: World[]): voi
   const root = document.createElement('main');
   root.className = 'worlds';
   const title = document.createElement('h1');
-  title.textContent = 'Choose a world';
+  title.textContent = 'Choose a World';
   const track = document.createElement('div');
   track.className = 'worlds-track';
   const cards = worlds.map(createCard);

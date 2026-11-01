@@ -2,7 +2,7 @@
 
 Got a phone and a room? Walk around filming for a minute or two, run one command, and step inside your own space in the browser. AtomSpace is still in its early stages, so expect a few rough edges!
 
-**[Try the live demo](https://atomspace-deploy.vercel.app/?scene=friendroom-r30)** (about 35 MB; WASD and mouse on a laptop, touch controls on a phone)
+**[Try it now :D!](https://atomspace-deploy.vercel.app/?scene=friendroom-r30)**
 
 | Level view | Tilted-down view |
 |---|---|
@@ -29,11 +29,11 @@ The navmesh comes from an occupancy grid of those dense points. These are from t
 |---|---|
 | ![Occupancy grid with camera positions in yellow, blocked cells in red and observed cells in grey](docs/images/occupancy-grid.png) | ![Walkable area in green with camera positions in yellow](docs/images/navmesh.png) |
 
-More detail: [docs/architecture.md](docs/architecture.md) and [docs/file_structure.md](docs/file_structure.md).
+More detail: [docs/architecture.md](docs/architecture.md).
 
 ## Status
 
-Built for a hackathon. Capture, reconstruction and free roaming are complete.
+Capture, reconstruction and free roaming work today. Here's where everything stands:
 
 | Feature | Status |
 |---|---|
@@ -122,7 +122,7 @@ cd viewer && npm install && npm run dev
 
 Then open `http://localhost:5173/?scene=testroom`. `scenes/testroom/ingest.json` is already in the repository and lists the keyframes.
 
-Expect the eye-level black band shown in our results: this capture was tilted down throughout, which is why the demo uses a different room.
+Expect a result like Room-2 in the live demo, including the eye-level black band, because this capture was tilted down throughout. Room-1 shows what a better capture can do.
 
 ## Reconstruct your own space
 

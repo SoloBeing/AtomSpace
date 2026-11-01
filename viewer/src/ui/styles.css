@@ -127,6 +127,7 @@ body {
 
 .world-card:focus-visible,
 .worlds-link:focus-visible,
+.worlds-dots button:focus-visible,
 .worlds-carousel button:focus-visible {
   outline: 2px solid #7ab8ff;
   outline-offset: 2px;
@@ -176,6 +177,41 @@ body {
 
 .worlds-carousel button:disabled {
   visibility: hidden;
+}
+
+.worlds-dots {
+  display: flex;
+  justify-content: center;
+}
+
+/* The button is a comfortable target; the dot drawn inside it is smaller. */
+.worlds-dots button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+}
+
+.worlds-dots button::after {
+  content: '';
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #555;
+  transition: background 0.2s;
+}
+
+.worlds-dots button:hover::after {
+  background: #999;
+}
+
+.worlds-dots button[aria-current]::after {
+  background: #7ab8ff;
 }
 
 .worlds-link {

@@ -9,6 +9,12 @@ export function nearestIndex(values: number[], target: number): number {
   return best;
 }
 
+/** Which way a wheel event moves the carousel. Sideways scrolling is left to the track itself. */
+export function wheelStep(deltaX: number, deltaY: number): -1 | 0 | 1 {
+  if (deltaY === 0 || Math.abs(deltaX) >= Math.abs(deltaY)) return 0;
+  return deltaY > 0 ? 1 : -1;
+}
+
 function createCard(world: World): HTMLAnchorElement {
   // A plain link, so opening a world is a fresh page: it can be shared, and Back returns here.
   const card = document.createElement('a');
@@ -33,7 +39,12 @@ function createArrow(label: string, symbol: string, onClick: () => void): HTMLBu
   return arrow;
 }
 
-/** Full-screen chooser: swipe, scroll, or use the arrows, then open a world. */
+// One wheel flick sends many events, so one step per this long. Trackpads coast for a while.
+const WHEEL_STEP_MS = 350;
+// While go() animates the track, its scroll events report the cards it's passing, not the target.
+const GO_SETTLE_MS = 500;
+
+/** Full-screen chooser: swipe, scroll, or use the arrows or dots, then open a world. */
 export function mountWorldCarousel(container: HTMLElement, worlds: World[]): void {
   const root = document.createElement('main');
   root.className = 'worlds';
@@ -45,9 +56,14 @@ export function mountWorldCarousel(container: HTMLElement, worlds: World[]): voi
   track.append(...cards);
 
   let active = 0;
+  let settlingUntil = 0;
   const setActive = (index: number) => {
     active = index;
     cards.forEach((card, i) => card.classList.toggle('active', i === index));
+    dots.forEach((dot, i) => {
+      if (i === index) dot.setAttribute('aria-current', 'true');
+      else dot.removeAttribute('aria-current');
+    });
     previous.disabled = index === 0;
     next.disabled = index === cards.length - 1;
   };
@@ -56,6 +72,7 @@ export function mountWorldCarousel(container: HTMLElement, worlds: World[]): voi
     const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
     cards[target].scrollIntoView({ behavior: still ? 'auto' : 'smooth', inline: 'center', block: 'nearest' });
     cards[target].focus({ preventScroll: true });
+    settlingUntil = performance.now() + GO_SETTLE_MS;
     setActive(target);
   };
 
@@ -64,10 +81,31 @@ export function mountWorldCarousel(container: HTMLElement, worlds: World[]): voi
   const carousel = document.createElement('div');
   carousel.className = 'worlds-carousel';
   carousel.append(previous, track, next);
-  root.append(title, carousel);
+
+  const dots = worlds.map((world, i) => {
+    const dot = document.createElement('button');
+    dot.type = 'button';
+    dot.setAttribute('aria-label', `Show ${world.name}`);
+    dot.addEventListener('click', () => go(i));
+    return dot;
+  });
+  const dotRow = document.createElement('div');
+  dotRow.className = 'worlds-dots';
+  dotRow.append(...dots);
+
+  root.append(title, carousel, dotRow);
   container.append(root);
 
+  let nextWheelStep = 0;
+  root.addEventListener('wheel', (event) => {
+    const step = wheelStep(event.deltaX, event.deltaY);
+    if (step === 0 || event.timeStamp < nextWheelStep) return;
+    nextWheelStep = event.timeStamp + WHEEL_STEP_MS;
+    go(active + step);
+  });
+
   track.addEventListener('scroll', () => {
+    if (performance.now() < settlingUntil) return;
     const centers = cards.map((card) => card.offsetLeft + card.offsetWidth / 2);
     setActive(nearestIndex(centers, track.scrollLeft + track.clientWidth / 2));
   });

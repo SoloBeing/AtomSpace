@@ -1,5 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { nearestIndex } from './worldCarousel';
+import { nearestIndex, wheelStep } from './worldCarousel';
+
+describe('wheelStep', () => {
+  it('moves forward on scroll down and back on scroll up', () => {
+    expect(wheelStep(0, 100)).toBe(1);
+    expect(wheelStep(0, -100)).toBe(-1);
+  });
+
+  it('counts small trackpad movements too', () => {
+    expect(wheelStep(0, 2)).toBe(1);
+  });
+
+  it('leaves mostly sideways scrolling to the track', () => {
+    expect(wheelStep(40, 10)).toBe(0);
+    expect(wheelStep(0, 0)).toBe(0);
+  });
+});
 
 describe('nearestIndex', () => {
   it('finds the closest value', () => {

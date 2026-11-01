@@ -14,7 +14,7 @@ The GPU stages (`reconstruct`, `splat`) need an NVIDIA card from the RTX 20 seri
    ```
 4. **Clone inside the Linux filesystem** (`~/AtomSpace`, not `/mnt/c/...`). Builds and frame I/O are much slower across the Windows mount.
    ```bash
-   git clone --recursive https://github.com/SoloBeing/NammaSpace.git ~/AtomSpace && cd ~/AtomSpace
+   git clone --recursive https://github.com/SoloBeing/AtomSpace.git ~/AtomSpace && cd ~/AtomSpace
    bash env/setup_wsl.sh
    bash env/download_weights.sh
    conda activate atomspace

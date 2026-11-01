@@ -67,11 +67,9 @@ The 4 GB run was a minimal experiment outside this repository, using selected lo
 
 ```bash
 sudo apt install -y git-lfs    # do this first, or large files arrive as small text pointers
-git clone --recursive https://github.com/SoloBeing/NammaSpace.git AtomSpace
+git clone --recursive https://github.com/SoloBeing/AtomSpace.git
 cd AtomSpace
 ```
-
-The repository is named NammaSpace; the project and code are AtomSpace.
 
 ### GPU machine
 

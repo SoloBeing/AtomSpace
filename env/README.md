@@ -1,10 +1,10 @@
 # GPU environment
 
-The GPU stages (`reconstruct`, `splat`) need an NVIDIA card from the RTX 20 series (Turing) or newer with 8 GB of VRAM recommended and 4 GB the minimum. They run in WSL2 on Windows, or on native Linux. The viewer and CPU stages don't need any of this.
+The GPU stages (`reconstruct`, `splat`) need an NVIDIA card from the RTX 20 series (Turing) or newer with 8 GB of VRAM recommended and 4 GB the minimum. They run in WSL2 on Windows, or on native Linux.
 
 ## Setup (once per machine)
 
-1. **Windows:** install the latest NVIDIA Game Ready or Studio driver. Don't install a driver inside WSL.
+1. **Windows:** install the latest NVIDIA Game Ready or Studio driver. Don't install a driver inside WSL, because it picks up the Windows driver.
 2. **Windows PowerShell:** `wsl --install -d Ubuntu-24.04`, then restart.
 3. **Ubuntu:**
    ```bash
@@ -23,9 +23,9 @@ The GPU stages (`reconstruct`, `splat`) need an NVIDIA card from the RTX 20 seri
 
 `setup_wsl.sh` reads the card's compute capability and builds gsplat for it (`7.5` Turing, `8.6` Ampere, `8.9` Ada, `12.0` Blackwell). gsplat and ASMK are pinned to fixed versions, and the script checks after each install step that PyTorch is still the CUDA 12.8 build.
 
-`download_weights.sh` can be interrupted and re-run safely. It resumes partial downloads, checks every file's size against a pinned value, and only moves a file into `checkpoints/` once it passes. On the first run it records each file's sha256 in `env/weights.sha256`. **After `smoke_test.py` passes, commit that file** (`git add env/weights.sha256 && git commit -m "Record MASt3R weight checksums"`), so every later download on any machine is checked against the same hashes. If Naver replaces a file upstream, the script stops instead of quietly downloading a different model.
+`download_weights.sh` downloads from Hugging Face and can be interrupted and re-run safely. It resumes partial downloads, pins each source to a fixed revision, and checks every file's size and sha256 before moving it into `checkpoints/`. The main model comes from Naver's official repository. Naver doesn't publish the retrieval files there, so those come from community copies on Hugging Face, with a second repository as a backup. If a file can't be verified, the script stops.
 
-## Common failures
+## Troubleshooting
 
 | Symptom | Fix |
 |---|---|

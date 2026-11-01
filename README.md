@@ -87,12 +87,10 @@ Follow [env/README.md](env/README.md). In short:
 
 ```bash
 bash env/setup_wsl.sh          # conda environment, ASMK, curope, gsplat
-bash env/download_weights.sh   # about 3 GB; safe to interrupt and re-run
+bash env/download_weights.sh   # about 3 GB from Hugging Face; safe to interrupt and re-run
 conda activate atomspace
 python env/smoke_test.py
 ```
-
-Naver's download server can be very slow (we saw 0.04 MB/s), so allow time for it.
 
 `setup_wsl.sh` needs conda, so it doesn't work on Google Colab. There, gsplat installed with:
 

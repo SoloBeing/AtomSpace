@@ -10,7 +10,7 @@ AtomSpace/
 ├── .gitmodules                   # pins third_party/mast3r
 │
 ├── env/                          # GPU machine setup (WSL2 / Linux)
-│   ├── README.md                 # step-by-step setup + common failures
+│   ├── README.md                 # step-by-step setup + troubleshooting
 │   ├── environment.yml           # conda: python 3.11, CUDA 12.8 toolkit, ffmpeg, faiss, cython
 │   ├── requirements-gpu.txt      # torch/torchvision from the cu128 index (Turing → Blackwell)
 │   ├── setup_wsl.sh              # checks GPU (≥ sm_75, ≥ 4 GB), builds ASMK, curope, gsplat for the detected arch
@@ -26,7 +26,7 @@ AtomSpace/
 ├── checkpoints/                  # model weights, gitignored
 │
 ├── pipeline/                     # Python: video → scene bundle
-│   ├── pyproject.toml            # `atomspace` CLI entry point
+│   ├── pyproject.toml            # package metadata, dependencies, defines the `atomspace` command
 │   ├── atomspace/
 │   │   ├── cli.py                # run | ingest | reconstruct | splat | scale | navmesh | bundle
 │   │   ├── config.py             # VRAM profiles, stage settings, ScenePaths (every file location)
@@ -50,14 +50,15 @@ AtomSpace/
 │   │       ├── floor.py          # RANSAC floor + align to +Y up
 │   │       ├── obstacles.py      # occupancy grid between ankle and head height
 │   │       └── polygonize.py     # 0.25 m erosion → outlines → triangles → navmesh dict
-│   └── tests/                    # blur, dedupe, ingest, reconstruct, floor, navmesh
+│   └── tests/                    # blur, dedupe, floor, gpu, ingest, navmesh, reconstruct, splat
 │
 ├── viewer/                       # Three.js web client (runs on any machine)
 │   ├── package.json              # three, @mkkellogg/gaussian-splats-3d, fuse.js, vite
+│   ├── package-lock.json
 │   ├── vite.config.ts            # dev server also serves scenes/<name>/bundle/* and saves POIs
 │   ├── tsconfig.json
 │   ├── index.html
-│   └── src/
+│   └── src/                      # *.test.ts files sit beside the code they test
 │       ├── main.ts               # ?scene=<name> loads a bundle; &admin enables admin tools
 │       ├── vite-env.d.ts         # VITE_SCENES_BASE_URL (CDN base in production)
 │       ├── gaussian-splats-3d.d.ts  # types for the parts of the splat library we use
@@ -65,7 +66,8 @@ AtomSpace/
 │       │   ├── loader.ts         # fetches manifest, navmesh, pois; bundle types
 │       │   └── splatRenderer.ts  # splat viewer placed by world_from_recon
 │       ├── controls/
-│       │   ├── firstPerson.ts    # WASD + mouse look, proposes moves
+│       │   ├── firstPerson.ts    # WASD + mouse look, Shift to sprint, proposes moves
+│       │   ├── touch.ts          # phone controls: left thumb walks, right thumb looks
 │       │   └── navmeshGuard.ts   # lookahead dead stop + floor snap
 │       ├── poi/
 │       │   ├── search.ts         # fuzzy search (name, aliases, category)
@@ -78,9 +80,12 @@ AtomSpace/
 │       └── ui/
 │           ├── searchBar.ts
 │           ├── worldCarousel.ts  # chooser at the bare address, and the link back to it
+│           ├── loadingScreen.ts  # shown while a scene loads
+│           ├── controlsHint.ts   # controls hint
+│           ├── fpsCounter.ts     # on-screen FPS counter
 │           └── styles.css
 │
-├── scenes/worlds.json            # optional: the worlds offered in the carousel
+├── scenes/worlds.json            # the worlds offered in the carousel
 ├── scenes/<name>/                # one folder per captured space
 │   ├── ingest.json               # video metadata, track, keyframe list
 │   ├── raw/                      # input video                               (gitignored)

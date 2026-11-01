@@ -8,7 +8,7 @@ import torch
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
-CKPT = ROOT / "checkpoints" / "MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric.pth"
+CKPT = ROOT / "checkpoints" / "MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric"
 
 
 def check_cuda():

@@ -9,7 +9,7 @@ The `reconstruct` stage depends on these, so reconstructing scenes with this pip
 | Component | Copyright | License | Where it's used |
 |---|---|---|---|
 | [MASt3R](https://github.com/naver/mast3r) code | Naver Corporation | CC BY-NC-SA 4.0 | `third_party/mast3r` submodule |
-| MASt3R model and retrieval weights | Naver Corporation | CC BY-NC-SA 4.0 | Downloaded to `checkpoints/`, not in this repository |
+| MASt3R model and retrieval weights | Naver Corporation | CC BY-NC-SA 4.0 | Downloaded from Hugging Face to `checkpoints/`, not in this repository |
 | [DUSt3R](https://github.com/naver/dust3r) | Naver Corporation | CC BY-NC-SA 4.0 | Inside the MASt3R submodule |
 | [CroCo](https://github.com/naver/croco) | Naver Corporation | CC BY-NC-SA 4.0 | Inside the DUSt3R submodule |
 

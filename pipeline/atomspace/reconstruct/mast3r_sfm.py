@@ -9,7 +9,8 @@ from PIL import Image, ImageOps
 from ..config import CHECKPOINTS_DIR, MAST3R_DIR, MAST3R_IMAGE_SIZE, Profile
 from .export import Reconstruction
 
-MODEL_CKPT = CHECKPOINTS_DIR / "MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric.pth"
+# A folder: Hugging Face hosts the model as config.json + model.safetensors.
+MODEL_CKPT = CHECKPOINTS_DIR / "MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric"
 # Retriever finds the codebook next to this file (..._retrieval_codebook.pkl).
 RETRIEVAL_CKPT = CHECKPOINTS_DIR / "MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric_retrieval_trainingfree.pth"
 PATCH_SIZE = 16

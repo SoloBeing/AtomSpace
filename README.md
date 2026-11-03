@@ -46,23 +46,24 @@ Capture, reconstruction and free roaming work today. Here's where everything sta
 
 ## Results
 
-One command took a 90-second, 1080p phone video to a viewable scene in 75 minutes, on a laptop RTX 2050 with 4 GB of VRAM under WSL2. That scene is Room-2 in the live demo.
+A plain `atomspace run` took a 44-second iPhone video to a viewable scene in 80 minutes, on a laptop RTX 2050 with 4 GB of VRAM under WSL2. It picked the `vram_4gb` profile by itself and used real ASMK retrieval, with no wrapper or skipped checks.
 
 | Stage | Result | Time | Peak GPU memory |
 |---|---|---|---|
-| Ingest | 540 frames down to 101 keyframes | Under 1 min | None |
-| Reconstruct | 735 image pairs, 101 of 101 cameras, 2M dense points | 38 min | 4.41 GiB (PyTorch's figure; `nvidia-smi` read about 3,950 MiB) |
-| Splat | 30,000 steps, 1.5M Gaussians, about 1.16M kept, 37.3 MB file | 36 min | 0.51 GiB |
+| Ingest | 263 frames down to 101 keyframes | Under 1 min | None |
+| Reconstruct | 715 image pairs from ASMK, 101 of 101 cameras, 2M dense points | 42 min | 5.0 GiB (PyTorch's figure; `nvidia-smi` read at most 3,955 MiB) |
+| Splat | 30,000 steps, 1.5M Gaussians, about 1.09M kept, 34.9 MB file | 33 min | 0.54 GiB |
 | Bundle | Static scene files | Seconds | None |
 
-This run differed from a plain `atomspace run` in a few ways:
+The GPU averaged 51°C and peaked at 61°C. A few things to know about this run:
 
-- It used reduced settings, the ones now in the `vram_4gb` profile, and bypassed the old 8 GB check. A plain `atomspace run` on 4 GB hasn't been tested yet.
-- ASMK retrieval was replaced by a stand-in, cosine similarity of mean encoder features, because the codebook download was too slow. Real ASMK retrieval hasn't been run on real data yet.
-- Setup needed fixes before this run, so it doesn't show a first-try install.
+- The video is the one behind Room-1 in the live demo, but the live scene was made separately on Google Colab. Our 4 GB run looks worse than it, and we haven't pinned down why. The 4 GB profile matches only 3 retrieval pairs per frame, against 10 with 8 GB, which is a likely factor.
+- It ran on a machine that was already set up, so it doesn't show a first-try install.
 - Navmesh was skipped because it needs a metric scale from the user.
 
-We haven't measured image quality (PSNR, SSIM) yet. In this scene, fabrics stay sharp, but walls show blotchy colour patches.
+An earlier run on a 90-second video, with the same settings but a stand-in for ASMK, made Room-2 in the live demo in 75 minutes.
+
+We haven't measured image quality (PSNR, SSIM) yet.
 
 8 GB of VRAM is recommended and 4 GB is the minimum.
 

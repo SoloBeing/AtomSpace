@@ -1,4 +1,4 @@
-# AtomSpace
+# <img src="docs/images/logo.png" alt="AtomSpace logo" height="48" align="absmiddle"> AtomSpace
 
 Got a phone and a room? Walk around filming for a minute or two, run one command, and step inside your own space in the browser. AtomSpace is still in its early stages, so expect a few rough edges!
 

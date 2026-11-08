@@ -4,69 +4,6 @@ Got a phone and a room? Walk around filming for a minute or two, run one command
 
 **[Try it now :D!](https://atomspace-deploy.vercel.app/?scene=friendroom-r30)**
 
-| Level view | Tilted-down view |
-|---|---|
-| ![A reconstructed room in the web viewer, seen at eye level](docs/images/room-level.png) | ![The same room seen from a downward angle](docs/images/room-down.png) |
-
-## How it works
-
-![Pipeline: capture, ingest, MASt3R, then the 3DGS engine and scale plus navmesh, into a static scene bundle, the client runtime and the web viewer](docs/images/architecture.png)
-
-1. **Ingest:** ffmpeg extracts frames, OpenCV drops blurred and near-duplicate ones.
-2. **Reconstruct:** MASt3R-SfM estimates camera poses and dense 3D points from a sparse graph of image pairs, including loop-closure pairs. COLMAP isn't used.
-3. **Splat:** gsplat trains 3D Gaussians for 30,000 steps, seeded from the dense points.
-4. **Compress:** the model becomes a 32-byte-per-Gaussian `.splat`, without near-transparent and needle-shaped Gaussians.
-5. **Scale and navmesh:** the user gives one real distance, then a Python builder turns the dense points into walkable floor polygons with a 0.25 m buffer around obstacles.
-6. **Bundle and view:** static files are validated against `schemas/`, and the Three.js viewer renders them in the browser with [gaussian-splats-3d](https://github.com/mkkellogg/GaussianSplats3D).
-
-Loop closure is what removes drift. Below, each real frame (top) sits above the generated point cloud projected into the same view (bottom):
-
-![Test room frames above the generated point cloud projected into the same views](docs/images/reprojection.jpg)
-
-The navmesh comes from an occupancy grid of those dense points. These are from the test room at a trial scale:
-
-| Occupancy grid | Navmesh |
-|---|---|
-| ![Occupancy grid with camera positions in yellow, blocked cells in red and observed cells in grey](docs/images/occupancy-grid.png) | ![Walkable area in green with camera positions in yellow](docs/images/navmesh.png) |
-
-More detail: [docs/architecture.md](docs/architecture.md).
-
-## Status
-
-Capture, reconstruction and free roaming work today. Here's where everything stands:
-
-| Feature | Status |
-|---|---|
-| Video to walkable splat in the browser | Working, used for the live demo |
-| Laptop and phone controls | Working on the live demo; phones run it less smoothly |
-| Scale tool, navmesh collision | Built and tested on the test room or synthetic data; not applied to the demo scene, so you can walk through its walls |
-| POI search, fly-to and POI editor | Built and tested on synthetic data; the demo scene has no POIs |
-| ARKit/LiDAR fast track | Designed, not implemented (`sensor_track.py` raises `NotImplementedError`) |
-| Pathfinding, phone-camera AR navigation | Planned |
-
-## Results
-
-A plain `atomspace run` took a 44-second iPhone video to a viewable scene in 80 minutes, on a laptop RTX 2050 with 4 GB of VRAM under WSL2. It picked the `vram_4gb` profile by itself and used real ASMK retrieval, with no wrapper or skipped checks.
-
-| Stage | Result | Time | Peak GPU memory |
-|---|---|---|---|
-| Ingest | 263 frames down to 101 keyframes | Under 1 min | None |
-| Reconstruct | 715 image pairs from ASMK, 101 of 101 cameras, 2M dense points | 42 min | 5.0 GiB (PyTorch's figure; `nvidia-smi` read at most 3,955 MiB) |
-| Splat | 30,000 steps, 1.5M Gaussians, about 1.09M kept, 34.9 MB file | 33 min | 0.54 GiB |
-| Bundle | Static scene files | Seconds | None |
-
-The GPU averaged 51°C and peaked at 61°C. A few things to know about this run:
-
-- The video is the one behind Room-1 in the live demo, but the live scene was made separately on Google Colab. Our 4 GB run looks worse than it, and we haven't pinned down why. The 4 GB profile matches only 3 retrieval pairs per frame, against 10 with 8 GB, which is a likely factor.
-- It ran on a machine that was already set up, so it doesn't show a first-try install.
-- Navmesh was skipped because it needs a metric scale from the user.
-
-An earlier run on a 90-second video, with the same settings but a stand-in for ASMK, made Room-2 in the live demo in 75 minutes.
-
-We haven't measured image quality (PSNR, SSIM) yet.
-
-8 GB of VRAM is recommended and 4 GB is the minimum.
-
 ## Setup
 
 ### Requirements

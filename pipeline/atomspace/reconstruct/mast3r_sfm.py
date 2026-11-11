@@ -76,6 +76,7 @@ def reconstruct(frames: list[Path], profile: Profile, cache_dir: Path) -> Recons
     try:
         # Matching: the only part that needs the network. Results go to the disk cache.
         cache_encoder(model)
+        faster_nn_search()
         forward_mast3r(pairs, model, cache_path=str(cache_dir), subsample=SUBSAMPLE,
                        desc_conf=DESC_CONF, device="cuda")
         log_vram("after matching")
@@ -152,6 +153,62 @@ def cache_encoder(model) -> None:
         return features1, features2, positions1, positions2
 
     model._encode_image_pairs = encode_pair
+
+
+def faster_nn_search() -> None:
+    """Speeds up MASt3R's matching-point search without changing a single match.
+
+    Each search query compares a few hundred to 2,304 pixels' descriptors against every pixel of
+    the other image. Queries large enough to be split into blocks (fast_nn.py:43-67) took ~84 ms,
+    because every block also found the reverse-direction match, which the query then discards
+    (fast_nn.py:82-84), and wrote results with boolean masks, each of which makes the CPU wait for
+    the GPU. Those queries now go to nearest_in_blocks. Smaller queries keep MASt3R's own single-pass
+    path, which is already fast.
+    """
+    import torch
+    from mast3r import fast_nn
+
+    original = fast_nn.cdistMatcher.query
+    if getattr(original, "atomspace", False):
+        return
+
+    def query(self, queries, k=1, **kw):
+        block = kw.get("block_size")
+        if (k != 1 or block is None or not isinstance(queries, torch.Tensor) or queries.numel() == 0
+                or len(queries) * len(self.db_pts) <= block**2):
+            return original(self, queries, k=k, **kw)
+        return None, nearest_in_blocks(queries.to(self.device), self.db_pts, block, kw.get("dist", "l2"))
+
+    query.atomspace = True
+    fast_nn.cdistMatcher.query = query
+
+
+def nearest_in_blocks(A, B, block_size: int, dist: str) -> np.ndarray:
+    """Index of each row of A's nearest row of B: largest dot product (dist "dot") or smallest
+    Euclidean distance ("l2"). Same blocks, same arithmetic and same tie rule (strict <, so the
+    earlier block wins) as the A side of MASt3R's bruteforce_reciprocal_nns, so the result is
+    identical; torch.where keeps the best so far without making the CPU wait."""
+    import torch
+
+    out = []
+    for i in range(0, len(A), block_size):
+        A_i = A[i:i + block_size]
+        best = torch.full((len(A_i),), float("inf"), device=A.device, dtype=A.dtype)
+        nearest = torch.full((len(A_i),), -1, device=A.device, dtype=torch.int64)
+        for j in range(0, len(B), block_size):
+            B_j = B[j:j + block_size]
+            if dist == "dot":
+                similarity, index = torch.max(A_i @ B_j.T, dim=1)
+                distance = similarity.neg()
+            elif dist == "l2":
+                distance, index = torch.min(torch.cdist(A_i, B_j), dim=1)
+            else:
+                raise ValueError(f"Unknown {dist=}")
+            better = distance < best
+            best = torch.where(better, distance, best)
+            nearest = torch.where(better, index + j, nearest)
+        out.append(nearest)
+    return torch.cat(out).cpu().numpy()
 
 
 def log_vram(phase: str) -> None:

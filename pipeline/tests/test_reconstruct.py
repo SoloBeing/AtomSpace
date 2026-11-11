@@ -6,7 +6,9 @@ from PIL import Image
 
 from atomspace.config import ScenePaths
 from atomspace.reconstruct.export import Reconstruction, read_ply, write_reconstruction
-from atomspace.reconstruct.mast3r_sfm import cache_encoder, pair_graph, to_original_pixels, voxel_downsample
+from atomspace.reconstruct.mast3r_sfm import (
+    cache_encoder, faster_nn_search, nearest_in_blocks, pair_graph, to_original_pixels, voxel_downsample,
+)
 
 
 def _connected(n, edges):
@@ -126,3 +128,54 @@ def test_each_image_is_encoded_once_however_many_pairs_it_is_in():
     assert torch.equal(feat_b, b * 2) and torch.equal(pos_b, b * 3)
     assert torch.equal(feat_b2, feat_b) and torch.equal(pos_b2, pos_b)
     assert torch.equal(feat_c, c * 2)
+
+
+def _mast3r_fast_nn():
+    """MASt3R's own fast_nn module, the reference for the faster search."""
+    import sys
+
+    from atomspace.config import MAST3R_DIR
+
+    pytest.importorskip("torch")
+    pytest.importorskip("scipy")
+    if not (MAST3R_DIR / "mast3r" / "fast_nn.py").exists():
+        pytest.skip("third_party/mast3r not fetched")
+    sys.path.insert(0, str(MAST3R_DIR))
+    import mast3r.utils.path_to_dust3r  # noqa: F401
+    from mast3r import fast_nn
+
+    return fast_nn
+
+
+@pytest.mark.parametrize("dist", ["dot", "l2"])
+def test_block_search_gives_mast3rs_matches(dist):
+    torch = pytest.importorskip("torch")
+    fast_nn = _mast3r_fast_nn()
+    gen = torch.Generator().manual_seed(0)
+    A = torch.nn.functional.normalize(torch.randn(50, 8, generator=gen), dim=1)
+    B = torch.nn.functional.normalize(torch.randn(300, 8, generator=gen), dim=1)
+    # Planted tie across blocks: the same row in block 0 and block 12; the earlier one must win.
+    B[200] = B[5]
+    A[0] = B[5]
+    expected, _ = fast_nn.bruteforce_reciprocal_nns(A, B, device="cpu", block_size=16, dist=dist)
+    got = nearest_in_blocks(A, B, 16, dist)
+    np.testing.assert_array_equal(got, expected)
+    assert got[0] == 5
+
+
+def test_faster_search_leaves_every_match_unchanged(monkeypatch):
+    torch = pytest.importorskip("torch")
+    fast_nn = _mast3r_fast_nn()
+    monkeypatch.setattr(fast_nn.cdistMatcher, "query", fast_nn.cdistMatcher.query)  # restored after the test
+    gen = torch.Generator().manual_seed(1)
+    pts1 = torch.nn.functional.normalize(torch.randn(32, 48, 8, generator=gen), dim=-1)
+    pts2 = torch.nn.functional.normalize(torch.randn(32, 48, 8, generator=gen), dim=-1)
+    # block_size 64: the 24 starting points x 1,536 pixels exceed 64**2, so the blocked path runs;
+    # later, smaller queries take MASt3R's own single-pass path.
+    kw = dict(subsample_or_initxy1=8, ret_xy=False, device="cpu", dist="dot", block_size=64)
+    before = fast_nn.fast_reciprocal_NNs(pts1, pts2, **kw)
+    faster_nn_search()
+    assert getattr(fast_nn.cdistMatcher.query, "atomspace", False)
+    after = fast_nn.fast_reciprocal_NNs(pts1, pts2, **kw)
+    for b, a in zip(before, after):
+        np.testing.assert_array_equal(a, b)

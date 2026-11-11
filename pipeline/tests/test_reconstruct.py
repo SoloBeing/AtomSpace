@@ -1,11 +1,12 @@
 import json
 
 import numpy as np
+import pytest
 from PIL import Image
 
 from atomspace.config import ScenePaths
 from atomspace.reconstruct.export import Reconstruction, read_ply, write_reconstruction
-from atomspace.reconstruct.mast3r_sfm import pair_graph, to_original_pixels, voxel_downsample
+from atomspace.reconstruct.mast3r_sfm import cache_encoder, pair_graph, to_original_pixels, voxel_downsample
 
 
 def _connected(n, edges):
@@ -100,3 +101,28 @@ def test_write_reconstruction(tmp_path):
 
     assert not paths.scale.exists()
     assert not paths.navmesh.exists()
+
+
+def test_each_image_is_encoded_once_however_many_pairs_it_is_in():
+    torch = pytest.importorskip("torch")
+
+    class Model:
+        calls = 0
+
+        def _encode_image(self, image, true_shape):
+            self.calls += 1
+            return image * 2, image * 3, None
+
+    model = Model()
+    cache_encoder(model)
+    a, b, c = (torch.full((1, 3, 2, 2), float(value)) for value in (1, 2, 4))
+    shape = torch.tensor([[2, 2]])
+
+    feat_a, feat_b, pos_a, pos_b = model._encode_image_pairs(a, b, shape, shape)
+    feat_b2, feat_c, pos_b2, _ = model._encode_image_pairs(b.clone(), c, shape, shape)
+
+    assert model.calls == 3
+    assert torch.equal(feat_a, a * 2) and torch.equal(pos_a, a * 3)
+    assert torch.equal(feat_b, b * 2) and torch.equal(pos_b, b * 3)
+    assert torch.equal(feat_b2, feat_b) and torch.equal(pos_b2, pos_b)
+    assert torch.equal(feat_c, c * 2)

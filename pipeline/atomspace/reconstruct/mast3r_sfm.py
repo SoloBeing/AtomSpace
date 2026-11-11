@@ -1,4 +1,6 @@
 import argparse
+import gc
+import hashlib
 import shutil
 import sys
 from pathlib import Path
@@ -21,6 +23,8 @@ LR_FINE, ITERS_FINE = 0.01, 300
 MIN_CONF = 1.5  # dense points below this MASt3R confidence are dropped (demo default)
 MAX_DENSE_POINTS = 2_000_000
 VOXEL_FRACTION = 0.005  # dedupe voxel = this fraction of the median camera-to-point distance
+# Part of MASt3R's cache file paths, so matching and alignment must be given the same values.
+SUBSAMPLE, DESC_CONF = 8, "desc_conf"
 
 
 def reconstruct(frames: list[Path], profile: Profile, cache_dir: Path) -> Reconstruction:
@@ -40,7 +44,7 @@ def reconstruct(frames: list[Path], profile: Profile, cache_dir: Path) -> Recons
     import torch
     import mast3r.utils.path_to_dust3r  # noqa: F401
     from dust3r.utils.image import load_images
-    from mast3r.cloud_opt.sparse_ga import sparse_global_alignment
+    from mast3r.cloud_opt.sparse_ga import convert_dust3r_pairs_naming, forward_mast3r, sparse_global_alignment
     from mast3r.model import AsymmetricMASt3R
     from mast3r.retrieval.processor import Retriever
 
@@ -60,20 +64,41 @@ def reconstruct(frames: list[Path], profile: Profile, cache_dir: Path) -> Recons
         similarity = retriever(image_paths)
     del retriever
     torch.cuda.empty_cache()
+    log_vram("after retrieval")
 
     edges = pair_graph(len(frames), profile.pair_window, profile.pair_retrieval_k, similarity)
     print(f"MASt3R: {len(frames)} frames, {len(edges)} pairs")
     imgs = load_images(image_paths, size=MAST3R_IMAGE_SIZE, verbose=False)
     pairs = [(imgs[i], imgs[j]) for i, j in edges]
     pairs += [(b, a) for a, b in pairs]
+    pairs = convert_dust3r_pairs_naming(image_paths, pairs)
 
     try:
+        # Matching: the only part that needs the network. Results go to the disk cache.
+        cache_encoder(model)
+        forward_mast3r(pairs, model, cache_path=str(cache_dir), subsample=SUBSAMPLE,
+                       desc_conf=DESC_CONF, device="cuda")
+        log_vram("after matching")
+
+        # Alignment reads only the cache, so the weights (~2.6 GiB) can leave the GPU first.
+        # forward_mast3r's own `del model` can't free them while this function holds a reference.
+        del model
+        gc.collect()  # cache_encoder's closure and the model refer to each other
+        torch.cuda.empty_cache()
+        log_vram("model freed")
+        # With no model, forward_mast3r silently skips pairs missing from the cache.
+        cached, _ = forward_mast3r(pairs, None, cache_path=str(cache_dir), subsample=SUBSAMPLE,
+                                   desc_conf=DESC_CONF, device="cuda")
+        if len(cached) != len(pairs):
+            raise RuntimeError(f"Only {len(cached)} of {len(pairs)} pairs are in the match cache.")
+
         # One phone lens with focus locked during capture, so all frames share intrinsics.
         scene = sparse_global_alignment(
-            image_paths, pairs, str(cache_dir), model,
+            image_paths, pairs, str(cache_dir), None, subsample=SUBSAMPLE, desc_conf=DESC_CONF,
             lr1=LR_COARSE, niter1=ITERS_COARSE, lr2=LR_FINE, niter2=ITERS_FINE,
             device="cuda", opt_depth=True, shared_intrinsics=True, matching_conf_thr=0.0,
         )
+        log_vram("after alignment")
         pts3d, _, confs = scene.get_dense_pts3d(clean_depth=True)
 
         cam_to_world = scene.get_im_poses().cpu().numpy()
@@ -106,6 +131,36 @@ def reconstruct(frames: list[Path], profile: Profile, cache_dir: Path) -> Recons
         points=points,
         colors=colors,
     )
+
+
+def cache_encoder(model) -> None:
+    """Encodes each image once. MASt3R only reuses encoder output within a pair, so otherwise an
+    image goes through the encoder again for every pair it's in, always with the same result."""
+    cache = {}
+
+    def encoded(image, true_shape):
+        key = hashlib.md5(image.cpu().numpy().tobytes()).digest()
+        if key not in cache:
+            features, positions, _ = model._encode_image(image, true_shape)
+            cache[key] = (features.cpu(), positions.cpu())  # main memory: VRAM is the scarce one
+        features, positions = cache[key]
+        return features.to(image.device), positions.to(image.device)
+
+    def encode_pair(image1, image2, true_shape1, true_shape2):
+        features1, positions1 = encoded(image1, true_shape1)
+        features2, positions2 = encoded(image2, true_shape2)
+        return features1, features2, positions1, positions2
+
+    model._encode_image_pairs = encode_pair
+
+
+def log_vram(phase: str) -> None:
+    """Prints memory held now and the stage's peak so far (the peak never resets mid-stage)."""
+    import torch
+
+    gib = 1024**3
+    print(f"VRAM {phase}: {torch.cuda.memory_allocated() / gib:.2f} GiB held, "
+          f"peak so far {torch.cuda.max_memory_allocated() / gib:.2f} GiB")
 
 
 def pair_graph(n: int, window: int, retrieval_k: int, similarity: np.ndarray | None) -> list[tuple[int, int]]:

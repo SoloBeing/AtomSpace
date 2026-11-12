@@ -8,7 +8,7 @@ import cv2
 import numpy as np
 from scipy.spatial import cKDTree
 
-from ..config import SPLAT_ITERATIONS, Profile
+from ..config import SPLAT_ITERATIONS, Profile, SplatOptions
 from ..reconstruct.export import CV_TO_GL, read_ply
 from .compress import SH_C0
 
@@ -94,7 +94,10 @@ def write_gaussians_ply(path: Path, gaussians: dict[str, np.ndarray]) -> None:
     os.replace(partial, path)
 
 
-def train(frames_dir: Path, transforms: Path, init_points: Path, out_ply: Path, profile: Profile) -> None:
+def train(
+    frames_dir: Path, transforms: Path, init_points: Path, out_ply: Path, profile: Profile,
+    options: SplatOptions = SplatOptions(),
+) -> None:
     """Trains 3D Gaussians with gsplat, seeded from MASt3R's dense points.
 
     Memory limits from the profile: images downscaled by `splat_downscale`, densification
@@ -170,6 +173,9 @@ def train(frames_dir: Path, transforms: Path, init_points: Path, out_ply: Path, 
         write_gaussians_ply(out_ply, {name: p.detach().cpu().numpy() for name, p in splats.items()})
 
     print(f"Splat: {len(cameras)} views, {len(start['means'])} starting Gaussians, scene scale {scene_scale:.2f}")
+    print(f"Splat options: {options}")
+    rasterize_mode = "antialiased" if options.antialiased else "classic"
+    log_max_aspect = None if options.max_aspect is None else float(np.log(options.max_aspect))
     began = time.monotonic()
     order: list[int] = []
     for step in range(SPLAT_ITERATIONS):
@@ -191,11 +197,20 @@ def train(frames_dir: Path, transforms: Path, init_points: Path, out_ply: Path, 
             height=height,
             sh_degree=0,
             packed=True,
+            rasterize_mode=rasterize_mode,
+            backgrounds=torch.rand(1, 3, device=device) if options.random_background else None,
         )
         strategy.step_pre_backward(splats, optimizers, strategy_state, step, info)
 
         l1 = F.l1_loss(render, target)
         loss = (1 - SSIM_WEIGHT) * l1 + SSIM_WEIGHT * (1 - _ssim(render, target))
+        aspect_loss = None
+        if log_max_aspect is not None:
+            # In log space: largest minus middle axis, above the allowed ratio. The smallest axis is free,
+            # so flat discs on a floor or wall cost nothing; only needles do.
+            log_scales = torch.sort(splats["scales"], dim=1).values
+            aspect_loss = F.relu(log_scales[:, 2] - log_scales[:, 1] - log_max_aspect).mean()
+            loss = loss + options.aspect_weight * aspect_loss
         loss.backward()
 
         # gsplat's order: densification runs after the optimizers, and it replaces their parameters.
@@ -208,8 +223,14 @@ def train(frames_dir: Path, transforms: Path, init_points: Path, out_ply: Path, 
         done = step + 1
         if done % LOG_EVERY == 0:
             peak = torch.cuda.max_memory_allocated() / 1024**3
+            extra = ""
+            if aspect_loss is not None:
+                with torch.no_grad():
+                    log_scales = torch.sort(splats["scales"], dim=1).values
+                    over = (log_scales[:, 2] - log_scales[:, 1] > log_max_aspect).float().mean().item()
+                extra = f", aspect {aspect_loss.item():.4f} ({100 * over:.1f}% over {options.max_aspect:g})"
             print(
-                f"  step {done}/{SPLAT_ITERATIONS}: loss {loss.item():.4f}, "
+                f"  step {done}/{SPLAT_ITERATIONS}: loss {loss.item():.4f}{extra}, "
                 f"{len(splats['means'])} Gaussians, peak {peak:.2f} GiB, {time.monotonic() - began:.0f} s",
                 flush=True,
             )

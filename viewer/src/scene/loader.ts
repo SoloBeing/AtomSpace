@@ -12,6 +12,8 @@ export interface Manifest {
     factor: number;
     reference?: { a: Vec3; b: Vec3; distance_m: number };
   };
+  /** Trained with antialiased rasterisation; render with the matching mode. Absent means classic. */
+  splat_antialiased?: boolean;
   files: { splat: string; navmesh: string | null; pois: string };
 }
 

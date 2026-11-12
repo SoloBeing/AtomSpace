@@ -37,6 +37,24 @@ PROFILES: dict[str, Profile] = {
 
 
 @dataclass(frozen=True)
+class SplatOptions:
+    """Optional training changes, all off by default.
+
+    max_aspect: penalise Gaussians whose largest axis is more than this many times their middle axis, so
+        detail is fitted with discs instead of needles. Flat discs (thin third axis) are not penalised.
+    random_background: a random background colour every step instead of black, so empty or missing parts
+        (sky, gaps) can't be fitted as "black" and must be covered or left visibly empty.
+    antialiased: gsplat's antialiased rasterisation; the viewer must then render with its matching mode,
+        so it is recorded in the bundle manifest.
+    """
+
+    max_aspect: float | None = None
+    aspect_weight: float = 0.1
+    random_background: bool = False
+    antialiased: bool = False
+
+
+@dataclass(frozen=True)
 class IngestConfig:
     extract_fps: float = 6.0
     max_frame_side: int = 1920
@@ -104,6 +122,10 @@ class ScenePaths:
     @property
     def splat_ply(self) -> Path:
         return self.recon / "splat.ply"
+
+    @property
+    def splat_meta(self) -> Path:
+        return self.recon / "splat_meta.json"
 
     @property
     def manifest(self) -> Path:

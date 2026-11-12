@@ -47,6 +47,9 @@ export async function createSplatViewer(
     sharedMemoryForWorkers: false,
     gpuAcceleratedSort: false,
     sceneRevealMode: SceneRevealMode.Instant,
+    // Same 0.3 px² screen blur either way; antialiased mode also fades splats by how much it widened them,
+    // which is what a splat trained in gsplat's antialiased mode expects.
+    antialiased: bundle.manifest.splat_antialiased === true,
   });
   scene.add(splats);
   // Before loading: drop-in mode initialises on its first rendered frame, and a scene that

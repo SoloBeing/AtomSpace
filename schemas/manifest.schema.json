@@ -39,6 +39,10 @@
         }
       }
     },
+    "splat_antialiased": {
+      "description": "The splat was trained with antialiased rasterisation, so the viewer must render it the same way. Absent means classic.",
+      "type": "boolean"
+    },
     "files": {
       "description": "Paths relative to the bundle folder.",
       "type": "object",

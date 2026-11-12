@@ -68,6 +68,8 @@ def run(paths: ScenePaths) -> None:
             "pois": paths.pois.name,
         },
     }
+    if paths.splat_meta.exists() and json.loads(paths.splat_meta.read_text()).get("antialiased"):
+        manifest["splat_antialiased"] = True
     _validate("manifest", manifest)
     paths.manifest.write_text(json.dumps(manifest, indent=2))
     print(f"Bundle ready: {paths.bundle}")

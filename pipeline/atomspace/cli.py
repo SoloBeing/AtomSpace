@@ -2,7 +2,7 @@ import argparse
 from pathlib import Path
 
 from . import bundle, ingest, navmesh, reconstruct, splat
-from .config import PROFILES, ScenePaths
+from .config import PROFILES, ScenePaths, SplatOptions
 from .gpu import resolve_profile
 from .reconstruct.scale import ScaleReference, metric_factor, save_reference
 
@@ -37,7 +37,10 @@ def cmd_reconstruct(args: argparse.Namespace) -> None:
 
 
 def cmd_splat(args: argparse.Namespace) -> None:
-    splat.run(_paths(args), resolve_profile(args.profile))
+    options = SplatOptions(
+        max_aspect=args.max_aspect, random_background=args.random_background, antialiased=args.antialiased
+    )
+    splat.run(_paths(args), resolve_profile(args.profile), options)
 
 
 def cmd_scale(args: argparse.Namespace) -> None:
@@ -72,7 +75,10 @@ def main(argv: list[str] | None = None) -> None:
     add("run", cmd_run, "full pipeline: ingest -> reconstruct -> splat -> navmesh -> bundle", video=True)
     add("ingest", cmd_ingest, "slice frames, drop blurry/duplicate ones", video=True)
     add("reconstruct", cmd_reconstruct, "camera poses + dense points (GPU)")
-    add("splat", cmd_splat, "train 3D Gaussian splat (GPU)")
+    p = add("splat", cmd_splat, "train 3D Gaussian splat (GPU)")
+    p.add_argument("--max-aspect", type=float, help="penalise needles longer than this many times their width")
+    p.add_argument("--random-background", action="store_true", help="random background colour while training")
+    p.add_argument("--antialiased", action="store_true", help="antialiased rasterisation (viewer follows)")
     p = add("scale", cmd_scale, "set metric scale from two points and their real distance")
     p.add_argument("--a", nargs=3, type=float, required=True, metavar=("X", "Y", "Z"), help="point A, recon space")
     p.add_argument("--b", nargs=3, type=float, required=True, metavar=("X", "Y", "Z"), help="point B, recon space")

@@ -185,7 +185,7 @@ def train(
         target = images[view].to(device).float()[None] / 255.0  # (1, H, W, 3)
         height, width = target.shape[1:3]
 
-        render, _, info = rasterization(
+        render, alpha, info = rasterization(
             means=splats["means"],
             quats=splats["quats"],
             scales=torch.exp(splats["scales"]),
@@ -198,8 +198,11 @@ def train(
             sh_degree=0,
             packed=True,
             rasterize_mode=rasterize_mode,
-            backgrounds=torch.rand(1, 3, device=device) if options.random_background else None,
         )
+        if options.random_background:
+            # Blended here rather than through gsplat's `backgrounds`, whose expected shape differs in packed
+            # mode; same result: background shows through wherever the splat is not fully opaque.
+            render = render + (1 - alpha) * torch.rand(3, device=device)
         strategy.step_pre_backward(splats, optimizers, strategy_state, step, info)
 
         l1 = F.l1_loss(render, target)

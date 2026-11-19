@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import './ui/styles.css';
 import { mountNavmeshOverlay } from './admin/navmeshOverlay';
 import { mountPoiEditor } from './admin/poiEditor';
+import { mountRouteTool } from './admin/routeTool';
+import { Pathfinder } from './nav/pathfinder';
 import { mountScaleTool } from './admin/scaleTool';
 import { FirstPersonControls } from './controls/firstPerson';
 import { NavmeshGuard } from './controls/navmeshGuard';
@@ -47,6 +49,7 @@ async function start(app: HTMLElement, sceneName: string, admin: boolean) {
 
   if (admin) {
     mountNavmeshOverlay(viewer, bundle.navmesh);
+    mountRouteTool(viewer, guard && bundle.navmesh ? { guard, pathfinder: new Pathfinder(bundle.navmesh) } : null);
     mountScaleTool(viewer, bundle);
     mountPoiEditor(viewer, bundle, (pois) => {
       pins.update(pois);

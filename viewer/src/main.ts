@@ -3,16 +3,17 @@ import './ui/styles.css';
 import { mountNavmeshOverlay } from './admin/navmeshOverlay';
 import { mountPoiEditor } from './admin/poiEditor';
 import { mountRouteTool } from './admin/routeTool';
-import { Pathfinder } from './nav/pathfinder';
 import { mountScaleTool } from './admin/scaleTool';
 import { FirstPersonControls } from './controls/firstPerson';
-import { NavmeshGuard } from './controls/navmeshGuard';
+import { EYE_HEIGHT_M, NavmeshGuard } from './controls/navmeshGuard';
 import { isTouchDevice, mountTouchControls } from './controls/touch';
+import { Directions } from './nav/directions';
+import { Pathfinder } from './nav/pathfinder';
 import { createRouteLine } from './nav/routeLine';
-import { flyTo, walkTo } from './poi/flyTo';
+import { flyTo, landing } from './poi/flyTo';
 import { createPins } from './poi/pins';
 import { createPoiSearch } from './poi/search';
-import { loadScene, loadWorlds, preloadThumbnails } from './scene/loader';
+import { loadScene, loadWorlds, preloadThumbnails, type Vec3 } from './scene/loader';
 import { createSplatViewer } from './scene/splatRenderer';
 import { mountControlsHint } from './ui/controlsHint';
 import { mountFpsCounter } from './ui/fpsCounter';
@@ -37,18 +38,23 @@ async function start(app: HTMLElement, sceneName: string, admin: boolean) {
   const pins = createPins(viewer.scene, bundle.pois);
   let search = createPoiSearch(bundle.pois);
   const pathfinder = bundle.navmesh ? new Pathfinder(bundle.navmesh) : null;
-  const route = createRouteLine(viewer.scene);
+  const directions = pathfinder ? new Directions(pathfinder, createRouteLine(viewer.scene)) : null;
+  const feet = (p: THREE.Vector3): Vec3 => [p.x, p.y - EYE_HEIGHT_M, p.z];
   let flying = false;
   let trip = 0;
   mountSearchBar(
     app,
     (query, limit) => search(query, limit),
     (poi) => {
+      // With a navmesh, show the way and let the user walk it.
+      if (directions && guard) {
+        const { position } = landing(viewer.camera, poi, guard);
+        if (directions.start(feet(viewer.camera.position), feet(position))) return;
+      }
+      // No navmesh, or no walking route to this POI: nothing to draw, so fly there.
       flying = true;
       const thisTrip = ++trip;
-      const going =
-        guard && pathfinder ? walkTo(viewer.camera, poi, guard, pathfinder, route) : flyTo(viewer.camera, poi, guard);
-      void going.then(() => {
+      void flyTo(viewer.camera, poi, guard).then(() => {
         // A newer trip may have cancelled this one; only the latest hands control back.
         if (thisTrip === trip) flying = false;
       });
@@ -71,8 +77,9 @@ async function start(app: HTMLElement, sceneName: string, admin: boolean) {
     if (flying) return;
     const position = viewer.camera.position;
     const delta = controls.desiredMove(dt);
-    if (delta.lengthSq() > 0) route.clear(); // the route stays drawn until you walk off by yourself
+    if (delta.lengthSq() === 0) return;
     position.copy(guard ? guard.tryMove(position, delta) : position.clone().add(delta));
+    directions?.update(feet(position));
   });
 }
 

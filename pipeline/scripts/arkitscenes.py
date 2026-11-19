@@ -136,7 +136,46 @@ def convert(capture: Path, scenes_root: Path, scene: str, per_m2: float) -> None
     print(f"{len(vertices):,} mesh vertices -> {len(points):,} surface samples, {len(poses)} cameras")
 
     navmesh.run(paths)
+    write_furniture_pois(capture / f"{video_id}_3dod_annotation.json", paths)
     bundle.run(paths)
+
+
+# ARKitScenes labels -> how people would ask for them.
+LABEL_NAMES = {"tv_monitor": ("TV", ["television", "monitor", "screen"])}
+
+
+def write_furniture_pois(annotation: Path, paths: ScenePaths) -> None:
+    """One auto POI per labelled piece of furniture, pinned on top of its box. Manual POIs already
+    in pois.json are kept; earlier auto ones are replaced."""
+    world = np.array(json.loads(paths.world.read_text())["world_from_recon"]).reshape(4, 4).T
+    up = np.linalg.inv(world[:3, :3])[:, 1]  # world +Y, in the mesh's frame
+    existing = json.loads(paths.pois.read_text())["pois"] if paths.pois.exists() else []
+    pois = [p for p in existing if p["source"] != "auto"]
+
+    seen: dict[str, int] = {}
+    for item in json.loads(annotation.read_text())["data"]:
+        label = item["label"]
+        box = item["segments"]["obbAligned"]
+        axes = np.array(box["normalizedAxes"]).reshape(3, 3)  # one box axis per row
+        half = np.array(box["axesLengths"]) / 2
+        top = np.array(box["centroid"]) + up * (half * np.abs(axes @ up)).sum()
+        name, aliases = LABEL_NAMES.get(label, (label.replace("_", " ").capitalize(), []))
+        seen[label] = seen.get(label, 0) + 1
+        if seen[label] > 1:
+            name = f"{name} {seen[label]}"
+        poi = {
+            "id": f"{label.replace('_', '-')}-{seen[label]}",
+            "name": name,
+            "category": label.replace("_", " "),
+            "position": np.round(world[:3, :3] @ top + world[:3, 3], 3).tolist(),
+            "source": "auto",
+        }
+        if aliases:
+            poi["aliases"] = aliases
+        pois.append(poi)
+
+    paths.pois.write_text(json.dumps({"format_version": 1, "pois": pois}, indent=2))
+    print(f"POIs: {sum(p['source'] == 'auto' for p in pois)} from furniture labels")
 
 
 def main() -> None:

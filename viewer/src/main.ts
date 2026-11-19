@@ -8,7 +8,8 @@ import { mountScaleTool } from './admin/scaleTool';
 import { FirstPersonControls } from './controls/firstPerson';
 import { NavmeshGuard } from './controls/navmeshGuard';
 import { isTouchDevice, mountTouchControls } from './controls/touch';
-import { flyTo } from './poi/flyTo';
+import { createRouteLine } from './nav/routeLine';
+import { flyTo, walkTo } from './poi/flyTo';
 import { createPins } from './poi/pins';
 import { createPoiSearch } from './poi/search';
 import { loadScene, loadWorlds, preloadThumbnails } from './scene/loader';
@@ -35,21 +36,28 @@ async function start(app: HTMLElement, sceneName: string, admin: boolean) {
   viewer.onFrame(mountFpsCounter(app)); // mounted before search, so results draw over it
   const pins = createPins(viewer.scene, bundle.pois);
   let search = createPoiSearch(bundle.pois);
+  const pathfinder = bundle.navmesh ? new Pathfinder(bundle.navmesh) : null;
+  const route = createRouteLine(viewer.scene);
   let flying = false;
+  let trip = 0;
   mountSearchBar(
     app,
     (query, limit) => search(query, limit),
     (poi) => {
       flying = true;
-      void flyTo(viewer.camera, poi, guard).then(() => {
-        flying = false;
+      const thisTrip = ++trip;
+      const going =
+        guard && pathfinder ? walkTo(viewer.camera, poi, guard, pathfinder, route) : flyTo(viewer.camera, poi, guard);
+      void going.then(() => {
+        // A newer trip may have cancelled this one; only the latest hands control back.
+        if (thisTrip === trip) flying = false;
       });
     },
   );
 
   if (admin) {
     mountNavmeshOverlay(viewer, bundle.navmesh);
-    mountRouteTool(viewer, guard && bundle.navmesh ? { guard, pathfinder: new Pathfinder(bundle.navmesh) } : null);
+    mountRouteTool(viewer, guard && pathfinder ? { guard, pathfinder } : null);
     mountScaleTool(viewer, bundle);
     mountPoiEditor(viewer, bundle, (pois) => {
       pins.update(pois);
@@ -63,6 +71,7 @@ async function start(app: HTMLElement, sceneName: string, admin: boolean) {
     if (flying) return;
     const position = viewer.camera.position;
     const delta = controls.desiredMove(dt);
+    if (delta.lengthSq() > 0) route.clear(); // the route stays drawn until you walk off by yourself
     position.copy(guard ? guard.tryMove(position, delta) : position.clone().add(delta));
   });
 }

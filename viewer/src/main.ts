@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import './ui/styles.css';
+import { mountNavmeshOverlay } from './admin/navmeshOverlay';
 import { mountPoiEditor } from './admin/poiEditor';
 import { mountScaleTool } from './admin/scaleTool';
 import { FirstPersonControls } from './controls/firstPerson';
@@ -45,6 +46,7 @@ async function start(app: HTMLElement, sceneName: string, admin: boolean) {
   );
 
   if (admin) {
+    mountNavmeshOverlay(viewer, bundle.navmesh);
     mountScaleTool(viewer, bundle);
     mountPoiEditor(viewer, bundle, (pois) => {
       pins.update(pois);

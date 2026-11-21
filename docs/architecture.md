@@ -66,7 +66,7 @@ The same bundle serves both sides, so a scene built for the web viewer can later
         │                         [5] NAVMESH
         │                             floor RANSAC (camera up picks the floor) → align
         │                             +Y up → occupancy grid (ankle → head height) →
-        │                             eroded by 0.25 m agent radius → outlines → triangles
+        │                             eroded by 0.15 m agent radius → outlines → triangles
         │                               │ bundle/navmesh.json + recon/world.json
         └───────────────┬───────────────┘
                         ▼

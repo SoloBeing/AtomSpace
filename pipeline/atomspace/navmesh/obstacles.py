@@ -42,6 +42,10 @@ def occupancy_grid(points_world: np.ndarray, cfg: NavmeshConfig, walked_xz: np.n
 
     observed = _point_counts(floor, low, cell, height, width) > 0
     blocked = _point_counts(obstacles, low, cell, height, width) >= cfg.min_blocked_points
+    # A blocked cell with at most one blocked neighbour is a sliver (a mesh fragment, a seat edge) that
+    # would otherwise cost a whole agent-sized circle of floor.
+    neighbours = cv2.filter2D(blocked.astype(np.uint8), -1, np.ones((3, 3), np.float32), borderType=cv2.BORDER_CONSTANT)
+    blocked &= neighbours > 2  # the count includes the cell itself
 
     # A floor seen a little patchily is still floor; blocked cells are applied after this.
     radius = int(np.ceil(cfg.floor_gap_fill_m / (2 * cell)))

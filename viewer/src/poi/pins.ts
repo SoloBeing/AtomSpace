@@ -8,6 +8,8 @@ const LIFT_M = 0.2; // the label floats above the point it marks
 
 export interface Pins {
   update(pois: Poi[]): void;
+  /** The POI whose label is under this point of the view (normalised device coordinates), nearest first. */
+  at(ndc: THREE.Vector2, camera: THREE.Camera): Poi | null;
   dispose(): void;
 }
 
@@ -60,13 +62,20 @@ export function createPins(scene: THREE.Scene, pois: Poi[]): Pins {
       const sprite = labelSprite(poi.name);
       sprite.position.fromArray(poi.position);
       sprite.position.y += LIFT_M;
+      sprite.userData.poi = poi;
       group.add(sprite);
     }
   };
 
+  const raycaster = new THREE.Raycaster();
   update(pois);
   return {
     update,
+    at: (ndc, camera) => {
+      raycaster.setFromCamera(ndc, camera); // also gives sprites the camera they need to be hit
+      const hit = raycaster.intersectObjects(group.children, false)[0];
+      return hit ? (hit.object.userData.poi as Poi) : null;
+    },
     dispose: () => {
       clear();
       scene.remove(group);

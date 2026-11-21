@@ -8,17 +8,18 @@ import { FirstPersonControls } from './controls/firstPerson';
 import { EYE_HEIGHT_M, NavmeshGuard } from './controls/navmeshGuard';
 import { isTouchDevice, mountTouchControls } from './controls/touch';
 import { Directions } from './nav/directions';
-import { Pathfinder } from './nav/pathfinder';
+import { Pathfinder, routeLength } from './nav/pathfinder';
 import { createRouteLine } from './nav/routeLine';
 import { flyTo } from './poi/flyTo';
 import { createPins } from './poi/pins';
 import { createPoiSearch } from './poi/search';
-import { loadScene, loadWorlds, preloadThumbnails, type Vec3 } from './scene/loader';
+import { loadScene, loadWorlds, type Poi, preloadThumbnails, type Vec3 } from './scene/loader';
 import { createSplatViewer } from './scene/splatRenderer';
 import { mountControlsHint } from './ui/controlsHint';
 import { mountFpsCounter } from './ui/fpsCounter';
 import { mountLoadingScreen } from './ui/loadingScreen';
-import { mountRouteStatus } from './ui/routeStatus';
+import { mountPoiCard } from './ui/poiCard';
+import { formatDistance, mountRouteStatus } from './ui/routeStatus';
 import { mountSearchBar } from './ui/searchBar';
 import { mountWorldCarousel, mountWorldsLink } from './ui/worldCarousel';
 
@@ -50,26 +51,58 @@ async function start(app: HTMLElement, sceneName: string, admin: boolean) {
       })
     : null;
   const feet = (p: THREE.Vector3): Vec3 => [p.x, p.y - EYE_HEIGHT_M, p.z];
+  // Routes go right up to the thing, as near as the navmesh allows.
+  const routeEnd = (poi: Poi, g: NavmeshGuard): Vec3 => feet(g.nearestPosition(poi.position[0], poi.position[2]));
   let flying = false;
   let trip = 0;
-  mountSearchBar(
-    app,
-    (query, limit) => search(query, limit),
-    (poi) => {
-      // With a navmesh, show the way right up to the thing (as near as the navmesh allows) and let the user walk it.
-      if (directions && guard) {
-        destination = poi.name; // before start(), which reports the first distance straight away
-        const end = guard.nearestPosition(poi.position[0], poi.position[2]);
-        if (directions.start(feet(viewer.camera.position), feet(end))) return;
+  const goTo = (poi: Poi) => {
+    card.hide();
+    // With a navmesh, show the way and let the user walk it.
+    if (directions && guard) {
+      destination = poi.name; // before start(), which reports the first distance straight away
+      if (directions.start(feet(viewer.camera.position), routeEnd(poi, guard))) return;
+    }
+    // No navmesh, or no walking route to this POI: nothing to draw, so fly there.
+    flying = true;
+    const thisTrip = ++trip;
+    void flyTo(viewer.camera, poi, guard).then(() => {
+      // A newer trip may have cancelled this one; only the latest hands control back.
+      if (thisTrip === trip) flying = false;
+    });
+  };
+  // Mounted before search, so results draw over it.
+  const card = mountPoiCard(app, goTo);
+  mountSearchBar(app, (query, limit) => search(query, limit), goTo);
+
+  const walkingDistance = (poi: Poi): string => {
+    if (!pathfinder || !guard) return '';
+    const path = pathfinder.findPath(feet(viewer.camera.position), routeEnd(poi, guard));
+    return path ? `${formatDistance(routeLength(path))} walk from here` : 'No walking route from here';
+  };
+  // Capture phase: a click on a pin opens its card instead of capturing the mouse for walking.
+  viewer.domElement.addEventListener(
+    'click',
+    (event) => {
+      if (viewer.picking) return; // an admin tool is waiting for this click
+      const locked = document.pointerLockElement === viewer.domElement;
+      const rect = viewer.domElement.getBoundingClientRect();
+      // With the mouse captured there's no cursor, so it's whatever is in the middle of the view.
+      const ndc = locked
+        ? new THREE.Vector2()
+        : new THREE.Vector2(
+            ((event.clientX - rect.left) / rect.width) * 2 - 1,
+            -((event.clientY - rect.top) / rect.height) * 2 + 1,
+          );
+      const poi = pins.at(ndc, viewer.camera);
+      if (!poi) {
+        card.hide();
+        return;
       }
-      // No navmesh, or no walking route to this POI: nothing to draw, so fly there.
-      flying = true;
-      const thisTrip = ++trip;
-      void flyTo(viewer.camera, poi, guard).then(() => {
-        // A newer trip may have cancelled this one; only the latest hands control back.
-        if (thisTrip === trip) flying = false;
-      });
+      event.stopImmediatePropagation();
+      if (locked) document.exitPointerLock(); // free the cursor for the card's buttons
+      card.show(poi, walkingDistance(poi));
     },
+    true,
   );
 
   if (admin) {

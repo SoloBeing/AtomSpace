@@ -10,6 +10,8 @@ export interface SplatViewer {
   onFrame(callback: (dtSeconds: number) => void): void;
   /** Resolves with the world point on the splat under the next canvas click, or null if it hit nothing. */
   pickNextClick(): Promise<THREE.Vector3 | null>;
+  /** True while pickNextClick is waiting: other click handlers should leave that click alone. */
+  readonly picking: boolean;
   dispose(): void;
 }
 
@@ -87,6 +89,7 @@ export async function createSplatViewer(
   };
   window.addEventListener('resize', onResize);
 
+  let picking = false;
   return {
     scene,
     camera,
@@ -95,14 +98,19 @@ export async function createSplatViewer(
     pickNextClick: () =>
       new Promise((resolve) => {
         document.exitPointerLock();
+        picking = true;
         // Capture phase, so this click doesn't also start mouse look.
         const onClick = (event: MouseEvent) => {
           event.stopImmediatePropagation();
           renderer.domElement.removeEventListener('click', onClick, true);
+          picking = false;
           resolve(pickAt(event));
         };
         renderer.domElement.addEventListener('click', onClick, true);
       }),
+    get picking() {
+      return picking;
+    },
     dispose: () => {
       window.removeEventListener('resize', onResize);
       renderer.setAnimationLoop(null);

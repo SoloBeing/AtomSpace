@@ -18,6 +18,7 @@ import { createSplatViewer } from './scene/splatRenderer';
 import { mountControlsHint } from './ui/controlsHint';
 import { mountFpsCounter } from './ui/fpsCounter';
 import { mountLoadingScreen } from './ui/loadingScreen';
+import { mountRouteStatus } from './ui/routeStatus';
 import { mountSearchBar } from './ui/searchBar';
 import { mountWorldCarousel, mountWorldsLink } from './ui/worldCarousel';
 
@@ -38,7 +39,15 @@ async function start(app: HTMLElement, sceneName: string, admin: boolean) {
   const pins = createPins(viewer.scene, bundle.pois);
   let search = createPoiSearch(bundle.pois);
   const pathfinder = bundle.navmesh ? new Pathfinder(bundle.navmesh) : null;
-  const directions = pathfinder ? new Directions(pathfinder, createRouteLine(viewer.scene)) : null;
+  const routeStatus = mountRouteStatus(app); // mounted before search, so results draw over it
+  let destination = '';
+  const directions = pathfinder
+    ? new Directions(pathfinder, createRouteLine(viewer.scene), (event) => {
+        if (event.kind === 'route') routeStatus.route(destination, event.metres);
+        else if (event.kind === 'arrived') routeStatus.arrived(destination);
+        else routeStatus.hide();
+      })
+    : null;
   const feet = (p: THREE.Vector3): Vec3 => [p.x, p.y - EYE_HEIGHT_M, p.z];
   let flying = false;
   let trip = 0;
@@ -48,6 +57,7 @@ async function start(app: HTMLElement, sceneName: string, admin: boolean) {
     (poi) => {
       // With a navmesh, show the way right up to the thing (as near as the navmesh allows) and let the user walk it.
       if (directions && guard) {
+        destination = poi.name; // before start(), which reports the first distance straight away
         const end = guard.nearestPosition(poi.position[0], poi.position[2]);
         if (directions.start(feet(viewer.camera.position), feet(end))) return;
       }

@@ -318,6 +318,32 @@ body {
   background: rgba(255, 255, 255, 0.6);
 }
 
+.route-status {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  box-sizing: border-box;
+  max-width: calc(100vw - 32px);
+  padding: 10px 16px;
+  border-radius: 8px;
+  background: rgba(17, 17, 17, 0.75);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums; /* the distance doesn't jitter as it counts down */
+  white-space: nowrap;
+  pointer-events: none; /* drags here still steer the camera */
+}
+
+.route-status.arrived {
+  background: rgba(30, 110, 50, 0.85);
+}
+
+@media (max-width: 720px) {
+  .route-status {
+    top: 104px; /* below the full-width search box and the FPS counter */
+  }
+}
+
 .fps-counter {
   position: absolute;
   top: 64px; /* just below the search box */

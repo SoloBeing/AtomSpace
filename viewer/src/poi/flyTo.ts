@@ -11,7 +11,7 @@ let currentFlight = 0;
  * Where to stand to see a POI: poi.view, or a point STANDOFF_M from the POI on the side we're
  * coming from, moved onto the navmesh. Positions are at eye height.
  */
-export function landing(camera: THREE.PerspectiveCamera, poi: Poi, guard: NavmeshGuard | null) {
+function landing(camera: THREE.PerspectiveCamera, poi: Poi, guard: NavmeshGuard | null) {
   const target = new THREE.Vector3().fromArray(poi.view?.target ?? poi.position);
   let position: THREE.Vector3;
   if (poi.view) {

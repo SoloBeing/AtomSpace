@@ -10,7 +10,7 @@ import { isTouchDevice, mountTouchControls } from './controls/touch';
 import { Directions } from './nav/directions';
 import { Pathfinder } from './nav/pathfinder';
 import { createRouteLine } from './nav/routeLine';
-import { flyTo, landing } from './poi/flyTo';
+import { flyTo } from './poi/flyTo';
 import { createPins } from './poi/pins';
 import { createPoiSearch } from './poi/search';
 import { loadScene, loadWorlds, preloadThumbnails, type Vec3 } from './scene/loader';
@@ -46,10 +46,10 @@ async function start(app: HTMLElement, sceneName: string, admin: boolean) {
     app,
     (query, limit) => search(query, limit),
     (poi) => {
-      // With a navmesh, show the way and let the user walk it.
+      // With a navmesh, show the way right up to the thing (as near as the navmesh allows) and let the user walk it.
       if (directions && guard) {
-        const { position } = landing(viewer.camera, poi, guard);
-        if (directions.start(feet(viewer.camera.position), feet(position))) return;
+        const end = guard.nearestPosition(poi.position[0], poi.position[2]);
+        if (directions.start(feet(viewer.camera.position), feet(end))) return;
       }
       // No navmesh, or no walking route to this POI: nothing to draw, so fly there.
       flying = true;

@@ -52,6 +52,10 @@ def write_reconstruction(recon: Reconstruction, paths: ScenePaths) -> None:
         p.unlink()
     if stale:
         print(f"Removed {', '.join(p.name for p in stale)}: the scale must be set again for the new reconstruction.")
+    # POIs can't be mapped into the new frame, but they're hand-made, so set them aside instead of deleting.
+    if paths.pois.exists():
+        old_pois = paths.pois.replace(paths.pois.with_name("pois.old.json"))
+        print(f"Moved POIs to {old_pois}: place them again once the scale is set.")
 
 
 def write_ply(path: Path, points: np.ndarray, colors: np.ndarray) -> None:

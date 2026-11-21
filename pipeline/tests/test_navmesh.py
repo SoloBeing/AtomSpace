@@ -168,9 +168,8 @@ def test_unscaled_bundle_stands_upright_around_the_first_camera(tmp_path):
     np.testing.assert_allclose(np.linalg.det(world_from_recon[:3, :3]), 1.0)
 
 
-def test_run_end_to_end_from_recon_space(tmp_path):
-    """A half-size, tilted reconstruction comes out as a metric, floor-aligned, valid bundle."""
-    paths = ScenePaths(tmp_path / "scene")
+def _tilted_scene(paths):
+    """A half-size, tilted reconstruction of the walled room with a table, scale set to 2 m."""
     paths.ensure()
     world_points = _walled_room(_box(2, 3, 1.5, 2.5))
 
@@ -186,6 +185,36 @@ def test_run_end_to_end_from_recon_space(tmp_path):
     paths.transforms.write_text(json.dumps({"frames": [{"transform_matrix": camera.tolist()}]}))
     paths.ingest_meta.write_text(json.dumps({"track": "fallback", "keyframes": ["00001.jpg"]}))
     save_reference(ScaleReference((0, 0, 0), (1, 0, 0), 2.0), paths.scale)
+    return recon_points
+
+
+def _world_from_recon(paths):
+    return np.array(json.loads(paths.world.read_text())["world_from_recon"]).reshape(4, 4).T
+
+
+def test_pois_follow_a_scale_correction(tmp_path):
+    paths = ScenePaths(tmp_path / "scene")
+    recon_points = _tilted_scene(paths)
+    navmesh.run(paths, CFG)
+    corner = np.append(recon_points[-1], 1.0)  # a table point
+    at = (_world_from_recon(paths) @ corner)[:3].tolist()
+    poi = {"id": "t", "name": "Table", "position": at, "view": {"position": at, "target": at}, "source": "manual"}
+    paths.pois.write_text(json.dumps({"format_version": 1, "pois": [poi]}))
+
+    save_reference(ScaleReference((0, 0, 0), (1, 0, 0), 2.1), paths.scale)
+    navmesh.run(paths, CFG)
+
+    expected = (_world_from_recon(paths) @ corner)[:3]
+    moved = json.loads(paths.pois.read_text())["pois"][0]
+    for p in (moved["position"], moved["view"]["position"], moved["view"]["target"]):
+        np.testing.assert_allclose(p, expected, atol=1e-6)
+    assert not np.allclose(expected, at)  # the frame really did change
+
+
+def test_run_end_to_end_from_recon_space(tmp_path):
+    """A half-size, tilted reconstruction comes out as a metric, floor-aligned, valid bundle."""
+    paths = ScenePaths(tmp_path / "scene")
+    recon_points = _tilted_scene(paths)
 
     navmesh.run(paths, CFG)
     bundle.run(paths)

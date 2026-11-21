@@ -31,8 +31,27 @@ def run(paths: ScenePaths, cfg: NavmeshConfig = NavmeshConfig()) -> None:
     vertices, triangles = walkable_mesh(safe, grid)
     navmesh = build_navmesh(vertices, triangles, cfg)
 
+    _move_pois(paths, world_from_recon)
     # Column-major so the viewer can pass it straight to THREE.Matrix4.fromArray.
     paths.world.write_text(json.dumps({"world_from_recon": world_from_recon.T.flatten().tolist()}, indent=2))
     paths.navmesh.write_text(json.dumps(navmesh))
     area_m2 = safe.sum() * grid.cell_size_m**2
     print(f"Navmesh: {len(navmesh['polygons'])} polygons, {area_m2:.1f} m2 walkable")
+
+
+def _move_pois(paths: ScenePaths, world_from_recon: np.ndarray) -> None:
+    """POIs are stored in world space; keep them on the same spot of the splat when the frame changes."""
+    if not (paths.world.exists() and paths.pois.exists()):
+        return
+    old = np.array(json.loads(paths.world.read_text())["world_from_recon"]).reshape(4, 4).T
+    move = world_from_recon @ np.linalg.inv(old)
+
+    def moved(p: list[float]) -> list[float]:
+        return (move[:3, :3] @ p + move[:3, 3]).tolist()
+
+    data = json.loads(paths.pois.read_text())
+    for poi in data["pois"]:
+        poi["position"] = moved(poi["position"])
+        if "view" in poi:
+            poi["view"] = {k: moved(v) for k, v in poi["view"].items()}
+    paths.pois.write_text(json.dumps(data, indent=2))

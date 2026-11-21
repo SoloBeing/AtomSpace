@@ -73,6 +73,7 @@ def test_write_reconstruction(tmp_path):
     Image.new("RGB", (640, 360)).save(paths.frames / "00001.jpg")
     paths.scale.write_text("{}")
     paths.navmesh.write_text("{}")
+    paths.pois.write_text('{"pois": ["hand-made"]}')
 
     c2w = np.eye(4)
     c2w[:3, 3] = [1, 2, 3]
@@ -103,6 +104,8 @@ def test_write_reconstruction(tmp_path):
 
     assert not paths.scale.exists()
     assert not paths.navmesh.exists()
+    assert not paths.pois.exists()
+    assert "hand-made" in paths.pois.with_name("pois.old.json").read_text()
 
 
 def test_each_image_is_encoded_once_however_many_pairs_it_is_in():

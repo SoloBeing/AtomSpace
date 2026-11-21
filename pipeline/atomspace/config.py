@@ -45,7 +45,7 @@ class IngestConfig:
 
 @dataclass(frozen=True)
 class NavmeshConfig:
-    agent_radius_m: float = 0.25
+    agent_radius_m: float = 0.15  # a person turning sideways; 0.25 shut off real 35-45 cm passages
     agent_height_m: float = 1.7
     ankle_height_m: float = 0.15
     max_climb_m: float = 0.2

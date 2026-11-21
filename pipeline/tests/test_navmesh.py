@@ -107,6 +107,14 @@ def test_stray_points_do_not_block_the_floor():
     assert _inside(vertices, triangles, 2.5, 2.0)
 
 
+def test_a_lone_sliver_does_not_block_but_a_thin_post_does():
+    sliver = np.c_[np.full(6, 2.51), np.linspace(0.38, 0.40, 6), np.full(6, 1.01)]  # e.g. a seat edge
+    post = _box(3.5, 3.65, 2.5, 2.65)  # 15 cm square
+    vertices, triangles = _mesh(_walled_room(sliver, post))
+    assert _inside(vertices, triangles, 2.51, 1.01)
+    assert not _inside(vertices, triangles, 3.57, 2.57)
+
+
 def _two_rooms(gap):
     """Rooms joined through a wall at x = 3, with an opening `gap` meters wide around z = 2."""
     wall = [_box(3, 3.1, 0, 2 - gap / 2), _box(3, 3.1, 2 + gap / 2, 4)]

@@ -334,6 +334,31 @@ body {
   pointer-events: none; /* drags here still steer the camera */
 }
 
+.route-status button {
+  margin-left: 12px;
+  padding: 2px 8px;
+  border: 1px solid #666;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  pointer-events: auto; /* the banner lets drags through; this button still takes clicks */
+}
+
+.route-status button:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.route-status button:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.route-status button[hidden] {
+  display: none;
+}
+
 .route-status.arrived {
   background: rgba(30, 110, 50, 0.85);
 }

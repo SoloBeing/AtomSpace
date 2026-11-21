@@ -39,7 +39,8 @@ async function start(app: HTMLElement, sceneName: string, admin: boolean) {
   const pins = createPins(viewer.scene, bundle.pois);
   let search = createPoiSearch(bundle.pois);
   const pathfinder = bundle.navmesh ? new Pathfinder(bundle.navmesh) : null;
-  const routeStatus = mountRouteStatus(app); // mounted before search, so results draw over it
+  // Mounted before search, so results draw over it. Cancelling stops the route, which hides the banner.
+  const routeStatus = mountRouteStatus(app, () => directions?.stop());
   let destination = '';
   const directions = pathfinder
     ? new Directions(pathfinder, createRouteLine(viewer.scene), (event) => {

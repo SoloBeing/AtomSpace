@@ -48,7 +48,11 @@ def test_ingest_end_to_end(panning_video, tmp_path):
     assert (paths.raw / "input.mp4").is_file()
 
 
-def test_ingest_rejects_static_video(tmp_path):
+def test_ingest_rejects_static_video_and_keeps_the_previous_ingest(panning_video, tmp_path):
+    paths = ScenePaths(tmp_path / "scenes" / "pan")
+    ingest.run(panning_video, paths, max_keyframes=150)
+    frames_before = sorted(p.name for p in paths.frames.glob("*.jpg"))
+
     video = tmp_path / "still.mp4"
     subprocess.run(
         ["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "testsrc=size=640x360:rate=30:duration=3",
@@ -56,4 +60,8 @@ def test_ingest_rejects_static_video(tmp_path):
         check=True,
     )
     with pytest.raises(RuntimeError, match="distinct views"):
-        ingest.run(video, ScenePaths(tmp_path / "scenes" / "still"), max_keyframes=150)
+        ingest.run(video, paths, max_keyframes=150)
+
+    assert sorted(p.name for p in paths.frames.glob("*.jpg")) == frames_before
+    assert (paths.raw / "input.mp4").read_bytes() == panning_video.read_bytes()
+    assert not (paths.frames / "candidates").exists()

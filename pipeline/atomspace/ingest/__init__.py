@@ -17,10 +17,6 @@ def run(video: Path, paths: ScenePaths, max_keyframes: int, cfg: IngestConfig = 
     if not video.is_file():
         raise FileNotFoundError(f"Video not found: {video}")
     paths.ensure()
-    stored = paths.raw / f"input{video.suffix.lower()}"
-    if video.resolve() != stored.resolve():
-        shutil.copy2(video, stored)
-
     meta = probe_video(video)
     print(
         f"Video: {meta.width}x{meta.height} @ {meta.fps:.2f} fps, {meta.duration_s:.1f} s, {meta.codec}"
@@ -33,10 +29,9 @@ def run(video: Path, paths: ScenePaths, max_keyframes: int, cfg: IngestConfig = 
         )
     track = choose_track(meta)
 
-    for old in paths.frames.glob("*.jpg"):
-        old.unlink()
+    # Nothing of the previous ingest is touched until the new video has proved usable.
     candidates_dir = paths.frames / "candidates"
-    candidates = extract_frames(stored, candidates_dir, min(cfg.extract_fps, meta.fps), cfg.max_frame_side)
+    candidates = extract_frames(video, candidates_dir, min(cfg.extract_fps, meta.fps), cfg.max_frame_side)
     sharp = filter_sharp(candidates, cfg.min_relative_sharpness, cfg.sharpness_window)
     keyframes = select_keyframes(sharp, cfg.min_motion, max_keyframes)
     if len(keyframes) < MIN_KEYFRAMES:
@@ -44,6 +39,12 @@ def run(video: Path, paths: ScenePaths, max_keyframes: int, cfg: IngestConfig = 
         raise RuntimeError(
             f"Only {len(keyframes)} distinct views found. Record a longer, slower walk that covers the space."
         )
+
+    stored = paths.raw / f"input{video.suffix.lower()}"
+    if video.resolve() != stored.resolve():
+        shutil.copy2(video, stored)
+    for old in paths.frames.glob("*.jpg"):
+        old.unlink()
     for frame in keyframes:
         shutil.copy2(frame, paths.frames / frame.name)
     shutil.rmtree(candidates_dir)

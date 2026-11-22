@@ -3,7 +3,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from .blur import load_gray
+from .blur import PROGRESS_EVERY, load_gray
 
 ANALYSIS_WIDTH = 320
 # Below this peak response the phase-correlation shift is noise (e.g. a featureless wall).
@@ -45,7 +45,9 @@ def select_keyframes(frames: list[Path], min_motion: float, max_keyframes: int) 
     kept = [frames[0]]
     previous = _small(frames[0])
     travelled = 0.0
-    for frame in frames[1:]:
+    for i, frame in enumerate(frames[1:], 2):
+        if i % PROGRESS_EVERY == 0:
+            print(f"Motion: {i}/{len(frames)}", flush=True)
         current = _small(frame)
         travelled += step_motion(previous, current)
         previous = current
@@ -53,6 +55,7 @@ def select_keyframes(frames: list[Path], min_motion: float, max_keyframes: int) 
             kept.append(frame)
             travelled = 0.0
     if len(kept) > max_keyframes:
+        print(f"Motion: {len(kept)} distinct views, thinning evenly to {max_keyframes}", flush=True)
         idx = np.linspace(0, len(kept) - 1, max_keyframes).round().astype(int)
         kept = [kept[i] for i in idx]
     return kept

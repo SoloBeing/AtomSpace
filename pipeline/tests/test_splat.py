@@ -97,3 +97,26 @@ def test_initial_gaussians_stay_within_the_budget_and_survive_duplicates():
     assert g["sh0"].shape == (1000, 1, 3) and g["opacities"].shape == (1000,)
 
     assert len(initial_gaussians(points, colors, max_points=100)["means"]) == 100
+
+
+def test_separable_ssim_matches_the_full_11x11_window():
+    torch = pytest.importorskip("torch")
+    import torch.nn.functional as F
+
+    from atomspace.splat.train import _ssim
+
+    gen = torch.Generator().manual_seed(0)
+    a, b = torch.rand(1, 40, 50, 3, generator=gen, dtype=torch.float64), torch.rand(1, 40, 50, 3, generator=gen, dtype=torch.float64)
+    x = torch.arange(11, dtype=a.dtype) - 5
+    g = torch.exp(-(x**2) / (2 * 1.5**2))
+    g = g / g.sum()
+    window = torch.outer(g, g)[None, None].repeat(3, 1, 1, 1)
+    p, q = a.permute(0, 3, 1, 2), b.permute(0, 3, 1, 2)
+    blur = lambda image: F.conv2d(image, window, groups=3)
+    ma, mb = blur(p), blur(q)
+    va, vb, cov = blur(p * p) - ma**2, blur(q * q) - mb**2, blur(p * q) - ma * mb
+    c1, c2 = 0.01**2, 0.03**2
+    full = (((2 * ma * mb + c1) * (2 * cov + c2)) / ((ma**2 + mb**2 + c1) * (va + vb + c2))).mean()
+
+    assert torch.allclose(_ssim(a, b), full, rtol=0, atol=1e-12)
+    assert _ssim(a, a).item() == pytest.approx(1.0)

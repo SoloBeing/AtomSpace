@@ -2,6 +2,7 @@ import json
 import os
 import time
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 import cv2
@@ -98,7 +99,8 @@ def train(frames_dir: Path, transforms: Path, init_points: Path, out_ply: Path, 
     """Trains 3D Gaussians with gsplat, seeded from MASt3R's dense points.
 
     Memory limits from the profile: images downscaled by `splat_downscale`, densification
-    stops growing at `splat_max_gaussians`, rasterization in packed mode.
+    stops growing at `splat_max_gaussians`. Training itself peaks well under 1 GiB, so the
+    frames stay on the GPU and rasterization runs unpacked (faster for one camera per step).
     Output is a standard 3DGS .ply in recon space.
 
     Base colour only (sh_degree 0): the .splat format can't store view-dependent colour, so
@@ -152,7 +154,7 @@ def train(frames_dir: Path, transforms: Path, init_points: Path, out_ply: Path, 
         "opacities": LR_OPACITIES, "sh0": LR_COLORS,
     }
     optimizers = {
-        name: torch.optim.Adam([{"params": splats[name], "lr": lr, "name": name}], eps=1e-15)
+        name: torch.optim.Adam([{"params": splats[name], "lr": lr, "name": name}], eps=1e-15, fused=True)
         for name, lr in rates.items()
     }
     means_decay = torch.optim.lr_scheduler.ExponentialLR(
@@ -162,7 +164,7 @@ def train(frames_dir: Path, transforms: Path, init_points: Path, out_ply: Path, 
     strategy.check_sanity(splats, optimizers)
     strategy_state = strategy.initialize_state(scene_scale=scene_scale)
 
-    images = [torch.from_numpy(c.image) for c in cameras]
+    images = [torch.from_numpy(c.image).to(device) for c in cameras]  # uint8, ~1.5 MB each at 960x540
     Ks = [torch.from_numpy(c.intrinsics).float().to(device)[None] for c in cameras]
     viewmats = [torch.from_numpy(np.linalg.inv(c.cam_to_world)).float().to(device)[None] for c in cameras]
 
@@ -176,7 +178,7 @@ def train(frames_dir: Path, transforms: Path, init_points: Path, out_ply: Path, 
         if not order:
             order = torch.randperm(len(cameras)).tolist()
         view = order.pop()
-        target = images[view].to(device).float()[None] / 255.0  # (1, H, W, 3)
+        target = images[view].float()[None] / 255.0  # (1, H, W, 3)
         height, width = target.shape[1:3]
 
         render, _, info = rasterization(
@@ -190,7 +192,7 @@ def train(frames_dir: Path, transforms: Path, init_points: Path, out_ply: Path, 
             width=width,
             height=height,
             sh_degree=0,
-            packed=True,
+            packed=False,
         )
         strategy.step_pre_backward(splats, optimizers, strategy_state, step, info)
 
@@ -203,7 +205,7 @@ def train(frames_dir: Path, transforms: Path, init_points: Path, out_ply: Path, 
             optimizer.step()
             optimizer.zero_grad(set_to_none=True)
         means_decay.step()
-        strategy.step_post_backward(splats, optimizers, strategy_state, step, info, packed=True)
+        strategy.step_post_backward(splats, optimizers, strategy_state, step, info, packed=False)
 
         done = step + 1
         if done % LOG_EVERY == 0:
@@ -218,18 +220,25 @@ def train(frames_dir: Path, transforms: Path, init_points: Path, out_ply: Path, 
     save()
 
 
-def _ssim(a, b, window_size: int = 11, sigma: float = 1.5):
-    """Mean structural similarity of two (1, H, W, 3) images in 0..1."""
+@lru_cache
+def _gaussian_1d(dtype, device, window_size: int = 11, sigma: float = 1.5):
+    """Rows and columns halves of the 11x11 SSIM window, made once per dtype and device."""
     import torch
+
+    x = torch.arange(window_size, dtype=dtype, device=device) - window_size // 2
+    g = torch.exp(-(x**2) / (2 * sigma**2))
+    g = (g / g.sum()).repeat(3, 1, 1, 1)  # (3, 1, 1, window)
+    return g, g.transpose(2, 3)
+
+
+def _ssim(a, b):
+    """Mean structural similarity of two (1, H, W, 3) images in 0..1."""
     import torch.nn.functional as F
 
-    x = torch.arange(window_size, dtype=a.dtype, device=a.device) - window_size // 2
-    g = torch.exp(-(x**2) / (2 * sigma**2))
-    g = g / g.sum()
-    window = torch.outer(g, g)[None, None].repeat(3, 1, 1, 1)
-
+    # The Gaussian window is separable: two 1-D passes give the same blur as one 11x11 pass, with 22 not 121 taps.
+    rows, cols = _gaussian_1d(a.dtype, a.device)
     a, b = a.permute(0, 3, 1, 2), b.permute(0, 3, 1, 2)
-    blur = lambda image: F.conv2d(image, window, groups=3)
+    blur = lambda image: F.conv2d(F.conv2d(image, rows, groups=3), cols, groups=3)
     mean_a, mean_b = blur(a), blur(b)
     var_a = blur(a * a) - mean_a**2
     var_b = blur(b * b) - mean_b**2

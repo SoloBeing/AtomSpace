@@ -2,7 +2,7 @@ import type { Vec3 } from '../scene/loader';
 import { type Pathfinder, routeLength } from './pathfinder';
 import type { RouteLine } from './routeLine';
 
-export const ARRIVED_M = 0.5;
+const ARRIVED_M = 0.5;
 
 /** What the walker should be told: how far is left, that they've arrived, or that there's no route. */
 export type DirectionsEvent = { kind: 'route'; metres: number } | { kind: 'arrived' } | { kind: 'stopped' };
@@ -19,10 +19,6 @@ export class Directions {
     private readonly line: RouteLine,
     private readonly onChange: (event: DirectionsEvent) => void = () => {},
   ) {}
-
-  get active(): boolean {
-    return this.goal !== null;
-  }
 
   /** Shows the route from `from` to `goal`. Returns false, showing nothing, if there is none. */
   start(from: Vec3, goal: Vec3): boolean {

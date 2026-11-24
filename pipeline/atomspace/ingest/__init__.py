@@ -31,7 +31,8 @@ def run(video: Path, paths: ScenePaths, max_keyframes: int, cfg: IngestConfig = 
 
     # Nothing of the previous ingest is touched until the new video has proved usable.
     candidates_dir = paths.frames / "candidates"
-    candidates = extract_frames(video, candidates_dir, min(cfg.extract_fps, meta.fps), cfg.max_frame_side)
+    fps = min(cfg.extract_fps, meta.fps)
+    candidates = extract_frames(video, candidates_dir, fps, cfg.max_frame_side)
     sharp = filter_sharp(candidates, cfg.min_relative_sharpness, cfg.sharpness_window)
     keyframes = select_keyframes(sharp, cfg.min_motion, max_keyframes)
     if len(keyframes) < MIN_KEYFRAMES:
@@ -55,7 +56,7 @@ def run(video: Path, paths: ScenePaths, max_keyframes: int, cfg: IngestConfig = 
                 "video": stored.name,
                 "meta": asdict(meta),
                 "track": track.value,
-                "extract_fps": min(cfg.extract_fps, meta.fps),
+                "extract_fps": fps,
                 "candidates": len(candidates),
                 "sharp": len(sharp),
                 "keyframes": [f.name for f in keyframes],

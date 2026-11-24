@@ -13,3 +13,10 @@ export function adminPanel(title: string): HTMLElement {
   column.append(panel);
   return panel;
 }
+
+/** A line of text in a panel, e.g. why its tool isn't available for this scene. */
+export function adminNote(panel: HTMLElement, text: string): void {
+  const note = document.createElement('p');
+  note.textContent = text;
+  panel.append(note);
+}

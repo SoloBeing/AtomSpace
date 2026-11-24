@@ -30,6 +30,5 @@ declare module '@mkkellogg/gaussian-splats-3d' {
         onProgress?: (percent: number, label: string, stage: number) => void;
       },
     ): Promise<void>;
-    dispose(): Promise<void>;
   }
 }

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ..config import ScenePaths
+from ..ingest.route import Track
 
 Vec3 = tuple[float, float, float]
 
@@ -37,6 +38,6 @@ def metric_factor(paths: ScenePaths) -> tuple[float, str] | None:
     """Recon-to-meters factor and its source, or None if the scene isn't metric yet."""
     if paths.scale.exists():
         return load_reference(paths.scale).factor(), "user"
-    if paths.ingest_meta.exists() and json.loads(paths.ingest_meta.read_text())["track"] == "fast":
+    if paths.ingest_meta.exists() and json.loads(paths.ingest_meta.read_text())["track"] == Track.FAST.value:
         return 1.0, "sensor"
     return None

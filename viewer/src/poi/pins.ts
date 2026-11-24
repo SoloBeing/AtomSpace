@@ -10,7 +10,6 @@ export interface Pins {
   update(pois: Poi[]): void;
   /** The POI whose label is under this point of the view (normalised device coordinates), nearest first. */
   at(ndc: THREE.Vector2, camera: THREE.Camera): Poi | null;
-  dispose(): void;
 }
 
 function labelSprite(text: string): THREE.Sprite {
@@ -75,10 +74,6 @@ export function createPins(scene: THREE.Scene, pois: Poi[]): Pins {
       raycaster.setFromCamera(ndc, camera); // also gives sprites the camera they need to be hit
       const hit = raycaster.intersectObjects(group.children, false)[0];
       return hit ? (hit.object.userData.poi as Poi) : null;
-    },
-    dispose: () => {
-      clear();
-      scene.remove(group);
     },
   };
 }

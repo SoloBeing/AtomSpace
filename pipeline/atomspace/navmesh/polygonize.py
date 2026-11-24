@@ -56,8 +56,8 @@ def walkable_mesh(safe: np.ndarray, grid: OccupancyGrid) -> tuple[np.ndarray, np
 
 
 def build_navmesh(vertices: np.ndarray, triangles: np.ndarray, cfg: NavmeshConfig) -> dict:
-    """Returns a dict matching schemas/navmesh.schema.json, including polygon neighbours so A*
-    can be added in v2 without rebuilding scenes."""
+    """Returns a dict matching schemas/navmesh.schema.json, including the polygon neighbours the
+    viewer's A* route search walks across."""
     edge_owner: dict[tuple[int, int], tuple[int, int]] = {}
     neighbours = [[-1, -1, -1] for _ in range(len(triangles))]
     for poly, tri in enumerate(triangles.tolist()):

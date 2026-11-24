@@ -3,6 +3,9 @@ import type { Navmesh, Vec3 } from '../scene/loader';
 
 export const EYE_HEIGHT_M = 1.6;
 
+/** The floor point under an eye-height camera position: routes and the navmesh work on the floor. */
+export const toFloor = (eye: THREE.Vector3): Vec3 => [eye.x, eye.y - EYE_HEIGHT_M, eye.z];
+
 const EDGE_TOLERANCE = 1e-9;
 
 type Triangle = [Vec3, Vec3, Vec3];

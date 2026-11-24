@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { Navmesh } from '../scene/loader';
 import type { SplatViewer } from '../scene/splatRenderer';
-import { adminPanel } from './panel';
+import { adminNote, adminPanel } from './panel';
 
 const LIFT_M = 0.02; // just above the floor so it doesn't flicker against floor splats
 const FILL = 0x3ccf6e;
@@ -74,12 +74,7 @@ function overlayGroup(lines: NavmeshLines): THREE.Group {
 /** Admin: a toggle that draws the navmesh over the splat, to check it against walls and furniture. */
 export function mountNavmeshOverlay(viewer: SplatViewer, navmesh: Navmesh | null): void {
   const panel = adminPanel('Navmesh');
-  if (!navmesh) {
-    const note = document.createElement('p');
-    note.textContent = 'This scene has no navmesh yet. Set the scale, then run atomspace navmesh.';
-    panel.append(note);
-    return;
-  }
+  if (!navmesh) return adminNote(panel, 'This scene has no navmesh yet. Set the scale, then run atomspace navmesh.');
 
   const lines = navmeshLines(navmesh);
   const group = overlayGroup(lines);

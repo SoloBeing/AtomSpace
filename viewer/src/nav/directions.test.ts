@@ -41,7 +41,6 @@ describe('Directions', () => {
     const { line, shown } = recorder();
     const directions = new Directions(pathfinder, line);
     expect(directions.start([0.5, 0, 1], [3.5, 0, 1])).toBe(true);
-    expect(directions.active).toBe(true);
     expect(shown.at(-1)![0]).toEqual([0.5, 0, 1]);
   });
 
@@ -60,14 +59,12 @@ describe('Directions', () => {
     directions.start([0.5, 0, 1], [3.5, 0, 1]);
     directions.update([3.2, 0, 1.1]);
     expect(shown.at(-1)).toBeNull();
-    expect(directions.active).toBe(false);
   });
 
   it('shows nothing when there is no route', () => {
     const { line, shown } = recorder();
     const directions = new Directions(pathfinder, line);
     expect(directions.start([0.5, 0, 1], [9, 0, 9])).toBe(false);
-    expect(directions.active).toBe(false);
     expect(shown.at(-1)).toBeNull();
   });
 
@@ -98,6 +95,5 @@ describe('Directions', () => {
     const before = shown.length;
     directions.update([-0.01, 0, 1]);
     expect(shown.length).toBe(before);
-    expect(directions.active).toBe(true);
   });
 });

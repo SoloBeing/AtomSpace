@@ -1,7 +1,7 @@
 import type * as THREE from 'three';
 import type { Poi, SceneBundle, Vec3 } from '../scene/loader';
 import type { SplatViewer } from '../scene/splatRenderer';
-import { adminPanel } from './panel';
+import { adminNote, adminPanel } from './panel';
 
 const vec3 = (v: THREE.Vector3): Vec3 => [v.x, v.y, v.z];
 
@@ -29,10 +29,7 @@ export function mountPoiEditor(viewer: SplatViewer, bundle: SceneBundle, onChang
   const panel = adminPanel('Points of interest');
   if (bundle.manifest.scale.source === 'unscaled') {
     // POIs live in world space, which moves once the scale and floor are set.
-    const note = document.createElement('p');
-    note.textContent = 'Set the scale and build the navmesh first.';
-    panel.append(note);
-    return;
+    return adminNote(panel, 'Set the scale and build the navmesh first.');
   }
 
   let pois = bundle.pois;

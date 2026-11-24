@@ -12,7 +12,6 @@ export interface SplatViewer {
   pickNextClick(): Promise<THREE.Vector3 | null>;
   /** True while pickNextClick is waiting: other click handlers should leave that click alone. */
   readonly picking: boolean;
-  dispose(): void;
 }
 
 /**
@@ -82,12 +81,11 @@ export async function createSplatViewer(
     return hits.length > 0 ? hits[0].origin.clone() : null;
   };
 
-  const onResize = () => {
+  window.addEventListener('resize', () => {
     camera.aspect = container.clientWidth / container.clientHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(container.clientWidth, container.clientHeight);
-  };
-  window.addEventListener('resize', onResize);
+  });
 
   let picking = false;
   return {
@@ -110,13 +108,6 @@ export async function createSplatViewer(
       }),
     get picking() {
       return picking;
-    },
-    dispose: () => {
-      window.removeEventListener('resize', onResize);
-      renderer.setAnimationLoop(null);
-      void splats.dispose();
-      renderer.dispose();
-      renderer.domElement.remove();
     },
   };
 }

@@ -7,6 +7,7 @@ from .config import PROFILES, Profile
 
 MIN_PROFILE = PROFILES["vram_4gb"]
 RECOMMENDED_PROFILE = PROFILES["vram_8gb"]
+TOO_LITTLE_VRAM = "GPU has {:.1f} GiB VRAM; AtomSpace needs at least 4 GB."
 
 
 def vram_gib() -> float | None:
@@ -28,7 +29,7 @@ def resolve_profile(name: str | None = None) -> Profile:
         return RECOMMENDED_PROFILE  # CPU-only stages: nothing here is limited by this machine
     eligible = [p for p in PROFILES.values() if vram >= p.min_vram_gib]
     if not eligible:
-        raise RuntimeError(f"GPU has {vram:.1f} GiB VRAM; AtomSpace needs at least 4 GB.")
+        raise RuntimeError(TOO_LITTLE_VRAM.format(vram))
     if vram < RECOMMENDED_PROFILE.min_vram_gib:
         print(f"Warning: {vram:.1f} GiB VRAM is below the recommended 8 GB. Using reduced limits; expect it to be slow.")
     return max(eligible, key=lambda p: p.min_vram_gib)
@@ -41,7 +42,7 @@ def require_gpu() -> None:
             "This stage needs an NVIDIA GPU (RTX 20 series or newer, 4 GB+, 8 GB recommended). See env/README.md."
         )
     if vram < MIN_PROFILE.min_vram_gib:
-        raise RuntimeError(f"GPU has {vram:.1f} GiB VRAM; AtomSpace needs at least 4 GB.")
+        raise RuntimeError(TOO_LITTLE_VRAM.format(vram))
 
 
 @contextmanager

@@ -5,6 +5,7 @@ import numpy as np
 
 # Scores are computed at a fixed size so they're comparable across videos.
 ANALYSIS_SIDE = 640
+PROGRESS_EVERY = 500
 
 
 def load_gray(path: Path) -> np.ndarray:
@@ -35,7 +36,12 @@ def filter_sharp(frames: list[Path], min_relative: float, window: int) -> list[P
     """
     if not frames:
         return []
-    scores = np.array([sharpness(load_gray(f)) for f in frames])
+    scores = []
+    for i, f in enumerate(frames, 1):
+        scores.append(sharpness(load_gray(f)))
+        if i % PROGRESS_EVERY == 0:
+            print(f"Sharpness: {i}/{len(frames)}", flush=True)
+    scores = np.array(scores)
     half = window // 2
     kept = []
     for i, frame in enumerate(frames):

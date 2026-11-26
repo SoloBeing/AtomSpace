@@ -7,7 +7,8 @@ ENV_NAME="atomspace"
 BUILD_DIR="$ROOT/third_party/_build"
 TORCH_PINS="$BUILD_DIR/torch-constraints.txt"
 GSPLAT_REF="v1.5.3"
-ASMK_REF="2a96d9c03a841dffdfddabc699a20512dcd09363"
+MAPANYTHING_REF="3d10cf7a3016fc0f9bb13a071ee66c47b10be0d9"
+PYCOLMAP_VERSION="4.2.1"
 APT_HINT="sudo apt update && sudo apt install -y build-essential git git-lfs wget libgl1 libglib2.0-0"
 
 die() {
@@ -114,28 +115,9 @@ mkdir -p "$BUILD_DIR"
 python -c "import torch, torchvision; print(f'torch=={torch.__version__}'); print(f'torchvision=={torchvision.__version__}')" \
   >"$TORCH_PINS"
 
-echo "==> Fetching MASt3R submodule"
-git -C "$ROOT" submodule update --init --recursive
-pip install -c "$TORCH_PINS" -r "$ROOT/third_party/mast3r/requirements.txt"
-pip install -c "$TORCH_PINS" -r "$ROOT/third_party/mast3r/dust3r/requirements.txt"
+echo "==> Installing MapAnything ${MAPANYTHING_REF:0:7} (reconstruct) and pycolmap (bundle adjustment)"
+pip install -c "$TORCH_PINS" "mapanything @ git+https://github.com/facebookresearch/map-anything@${MAPANYTHING_REF}" "pycolmap==${PYCOLMAP_VERSION}"
 check_torch
-
-echo "==> Building ASMK @ ${ASMK_REF:0:7} (retrieval for MASt3R-SfM pair selection)"
-if [[ ! -d "$BUILD_DIR/asmk" ]]; then
-  git clone https://github.com/jenicek/asmk "$BUILD_DIR/asmk"
-fi
-git -C "$BUILD_DIR/asmk" checkout -q "$ASMK_REF" 2>/dev/null || {
-  git -C "$BUILD_DIR/asmk" fetch -q origin
-  git -C "$BUILD_DIR/asmk" checkout -q "$ASMK_REF"
-}
-(cd "$BUILD_DIR/asmk/cython" && cythonize ./*.pyx)
-# No build isolation: ASMK's installer imports faiss, which is only in this env.
-pip install --no-build-isolation -c "$TORCH_PINS" "$BUILD_DIR/asmk"
-
-echo "==> Building curope (optional speedup, MAX_JOBS=$MAX_JOBS)"
-if ! (cd "$ROOT/third_party/mast3r/dust3r/croco/models/curope" && python setup.py build_ext --inplace); then
-  echo "    curope build failed; MASt3R will fall back to the slower PyTorch RoPE." >&2
-fi
 
 echo "==> Building gsplat $GSPLAT_REF for sm_${CAP_INT} (MAX_JOBS=$MAX_JOBS, takes a while)"
 pip install --no-build-isolation -c "$TORCH_PINS" \
@@ -147,5 +129,4 @@ check_torch
 
 echo
 echo "Done. Next:"
-echo "  bash env/download_weights.sh"
 echo "  conda activate $ENV_NAME && python env/smoke_test.py"

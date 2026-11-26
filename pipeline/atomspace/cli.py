@@ -16,7 +16,7 @@ def cmd_run(args: argparse.Namespace) -> None:
     profile = resolve_profile(args.profile)
     print(f"Profile: {profile.name}")
     ingest.run(Path(args.video), paths, profile.max_keyframes)
-    reconstruct.run(paths, profile)
+    reconstruct.run(paths)
     splat.run(paths, profile)
     if metric_factor(paths) is not None:
         navmesh.run(paths)
@@ -33,7 +33,7 @@ def cmd_ingest(args: argparse.Namespace) -> None:
 
 
 def cmd_reconstruct(args: argparse.Namespace) -> None:
-    reconstruct.run(_paths(args), resolve_profile(args.profile))
+    reconstruct.run(_paths(args))
 
 
 def cmd_splat(args: argparse.Namespace) -> None:

@@ -17,7 +17,7 @@ def _validate(name: str, data: dict) -> None:
 
 
 def _upright_from_cameras(paths: ScenePaths) -> list[float]:
-    """Before a scale is set there is no floor yet, and MASt3R's y axis points down. This stands
+    """Before a scale is set there is no floor yet, and the reconstruction's y axis points down (OpenCV). This stands
     the scene upright around the first camera so the viewer's scale tool has a usable view."""
     poses = camera_poses(paths.transforms)
     up = poses[:, :3, 1].mean(axis=0)

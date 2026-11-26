@@ -4,7 +4,7 @@ from atomspace import gpu
 
 
 @pytest.mark.parametrize(
-    ("vram", "profile"), [(None, "vram_8gb"), (4.0, "vram_4gb"), (7.9, "vram_8gb"), (12.0, "vram_12gb"), (24.0, "vram_24gb")]
+    ("vram", "profile"), [(None, "vram_8gb"), (4.0, "vram_4gb"), (7.9, "vram_8gb"), (12.0, "vram_12gb"), (24.0, "vram_24gb"), (39.5, "vram_40gb")]
 )
 def test_profile_follows_detected_vram(monkeypatch, vram, profile):
     monkeypatch.setattr(gpu, "vram_gib", lambda: vram)

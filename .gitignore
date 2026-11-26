@@ -9,7 +9,7 @@ __pycache__/
 viewer/node_modules/
 viewer/dist/
 
-# Model weights (download with env/download_weights.sh)
+# Model weights (old MASt3R checkpoints; MapAnything uses the Hugging Face cache)
 checkpoints/*
 !checkpoints/.gitkeep
 

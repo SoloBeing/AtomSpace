@@ -2,11 +2,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-CHECKPOINTS_DIR = REPO_ROOT / "checkpoints"
-MAST3R_DIR = REPO_ROOT / "third_party" / "mast3r"
 SCHEMAS_DIR = REPO_ROOT / "schemas"
 
-MAST3R_IMAGE_SIZE = 512
 SPLAT_ITERATIONS = 30_000
 
 
@@ -17,21 +14,22 @@ class Profile:
     name: str
     min_vram_gib: float
     max_keyframes: int
-    pair_window: int
-    pair_retrieval_k: int
     splat_downscale: int
     splat_max_gaussians: int
 
 
 # Thresholds sit slightly under the marketed size: an "8 GB" card reports ~7.6-8.0 GiB.
-# vram_4gb holds the settings tested on a 4 GB RTX 2050: 101 keyframes, 735 pairs, 4.41 GiB peak.
+# Keyframes are what MapAnything can take on the card: 101 views peaked at 8.7-11.2 GiB on a T4 and
+# 200 ran out of memory there. Below 12 GB reconstruct runs on Kaggle, so ingest keeps 101 for a T4.
+# shortcut: 200 and 400 are scaled from the T4 run, untested; measure on a 24 GB / A100 card.
 PROFILES: dict[str, Profile] = {
     p.name: p
     for p in (
-        Profile("vram_4gb", 3.5, 101, 5, 3, 2, 1_500_000),
-        Profile("vram_8gb", 7.5, 150, 5, 10, 2, 1_500_000),
-        Profile("vram_12gb", 11.5, 250, 8, 15, 2, 3_000_000),
-        Profile("vram_24gb", 23.0, 400, 10, 20, 1, 6_000_000),
+        Profile("vram_4gb", 3.5, 101, 2, 1_500_000),
+        Profile("vram_8gb", 7.5, 101, 2, 1_500_000),
+        Profile("vram_12gb", 11.5, 101, 2, 3_000_000),
+        Profile("vram_24gb", 23.0, 200, 1, 6_000_000),
+        Profile("vram_40gb", 39.0, 400, 1, 6_000_000),
     )
 }
 

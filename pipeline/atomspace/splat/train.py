@@ -96,7 +96,7 @@ def write_gaussians_ply(path: Path, gaussians: dict[str, np.ndarray]) -> None:
 
 
 def train(frames_dir: Path, transforms: Path, init_points: Path, out_ply: Path, profile: Profile) -> None:
-    """Trains 3D Gaussians with gsplat, seeded from MASt3R's dense points.
+    """Trains 3D Gaussians with gsplat, seeded from the reconstruction's dense points.
 
     Memory limits from the profile: images downscaled by `splat_downscale`, densification
     stops growing at `splat_max_gaussians`. Training itself peaks well under 1 GiB, so the

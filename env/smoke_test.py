@@ -1,14 +1,7 @@
-"""Verifies the GPU stack end to end: CUDA arch, VRAM profile, gsplat kernels, MASt3R inference."""
+"""Verifies the GPU stack: CUDA arch, VRAM profile, gsplat kernels, MapAnything and pycolmap installed."""
 import sys
-import tempfile
-from pathlib import Path
 
-import numpy as np
 import torch
-from PIL import Image
-
-ROOT = Path(__file__).resolve().parents[1]
-CKPT = ROOT / "checkpoints" / "MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric"
 
 
 def check_cuda():
@@ -57,32 +50,21 @@ def check_gsplat():
     print(f"gsplat   : OK (forward + backward, loss {loss.item():.3f})")
 
 
-def check_mast3r():
-    if not CKPT.exists():
-        sys.exit(f"FAIL: missing {CKPT.name}. Run env/download_weights.sh.")
-    sys.path.insert(0, str(ROOT / "third_party" / "mast3r"))
-    from mast3r.model import AsymmetricMASt3R
-    import mast3r.utils.path_to_dust3r  # noqa: F401
-    from dust3r.inference import inference
-    from dust3r.utils.image import load_images
+def check_reconstruct():
+    import mapanything  # noqa: F401
+    import pycolmap
 
-    model = AsymmetricMASt3R.from_pretrained(str(CKPT)).to("cuda").eval()
-    with tempfile.TemporaryDirectory() as tmp:
-        paths = []
-        rng = np.random.default_rng(0)
-        for i in range(2):
-            p = Path(tmp) / f"{i}.png"
-            Image.fromarray(rng.integers(0, 255, (384, 512, 3), dtype=np.uint8)).save(p)
-            paths.append(str(p))
-        images = load_images(paths, size=512, verbose=False)
-        out = inference([tuple(images)], model, "cuda", batch_size=1, verbose=False)
-    print(f"MASt3R   : OK (pointmap {tuple(out['pred1']['pts3d'].shape)})")
+    from atomspace.reconstruct.mapanything_sfm import MIN_VRAM_GIB
+
+    vram = torch.cuda.get_device_properties(0).total_memory / 1024**3
+    where = "here" if vram >= MIN_VRAM_GIB else "on Kaggle (env/kaggle_reconstruct.ipynb): this card is too small"
+    print(f"Recon    : MapAnything + pycolmap {pycolmap.__version__} installed; reconstruct runs {where}")
 
 
 if __name__ == "__main__":
     check_cuda()
     torch.cuda.reset_peak_memory_stats()
     check_gsplat()
-    check_mast3r()
+    check_reconstruct()
     print(f"Peak VRAM: {torch.cuda.max_memory_allocated() / 1024**3:.2f} GiB")
     print("All checks passed.")

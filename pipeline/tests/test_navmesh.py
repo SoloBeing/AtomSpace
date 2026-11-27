@@ -101,6 +101,21 @@ def test_walked_cells_are_free_of_noise_and_connect_to_the_floor():
     assert _inside(vertices, triangles, 1.0, 2.0) and _inside(vertices, triangles, 4.0, 2.0)
 
 
+def test_walk_between_keyframes_is_free_but_a_pose_jump_is_not():
+    floor = np.vstack([_floor(0, 2, 0, 4), _floor(3, 5, 0, 4)])
+    smear = _box(2.0, 3.0, 1.8, 2.2, top=0.5)
+    walls = [_box(-0.1, 5.1, -0.1, 0), _box(-0.1, 5.1, 4, 4.1), _box(-0.1, 0, 0, 4), _box(5, 5.1, 0, 4)]
+    points = np.vstack([floor, smear, *walls])
+    cfg = NavmeshConfig(walked_radius_m=0.6)
+
+    def crossed(path):
+        grid = occupancy_grid(points, cfg, walked_xz=np.array(path, float))
+        return _inside(*walkable_mesh(safe_cells(grid, CFG.agent_radius_m), grid), 2.5, 2.0)
+
+    assert crossed([[1.6, 2.0], [3.4, 2.0]])  # two keyframes 1.8 m apart, either side of the smear
+    assert not crossed([[0.5, 2.0], [4.5, 2.0]])  # 4 m in one step: a glitch, not a walk
+
+
 def test_stray_points_do_not_block_the_floor():
     stray = np.array([[2.5, 1.0, 2.0], [2.5, 1.1, 2.0]])
     vertices, triangles = _mesh(_walled_room(stray))

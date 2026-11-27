@@ -7,6 +7,7 @@ from scipy.ndimage import binary_fill_holes
 from ..config import NavmeshConfig
 
 MAX_GRID_SIDE = 4000  # 200 m at the default cell size; beyond this the scale is almost certainly wrong
+MAX_WALK_STEP_M = 2.0  # clite-ma400 keyframes 171->172 are 1.7 m apart across a real aisle
 
 
 @dataclass
@@ -55,8 +56,13 @@ def occupancy_grid(points_world: np.ndarray, cfg: NavmeshConfig, walked_xz: np.n
     if walked_xz is not None and len(walked_xz) > 0:
         walked = np.zeros((height, width), np.uint8)
         pixels = np.floor((walked_xz - low) / cell).astype(int)
-        for col, row in pixels:
-            cv2.circle(walked, (int(col), int(row)), int(round(cfg.walked_radius_m / cell)), 1, -1)
+        r = int(round(cfg.walked_radius_m / cell))
+        steps = np.linalg.norm(np.diff(walked_xz, axis=0), axis=1)
+        for i, (col, row) in enumerate(pixels):
+            cv2.circle(walked, (int(col), int(row)), r, 1, -1)
+            # They walked between keyframes too; a longer jump is a pose glitch, not a path.
+            if i and steps[i - 1] < MAX_WALK_STEP_M:
+                cv2.line(walked, (int(pixels[i - 1][0]), int(pixels[i - 1][1])), (int(col), int(row)), 1, 2 * r + 1)
         observed |= walked.astype(bool)
         blocked &= ~walked.astype(bool)
     observed = binary_fill_holes(observed)

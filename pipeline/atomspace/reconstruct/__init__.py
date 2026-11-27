@@ -14,11 +14,16 @@ def run(paths: ScenePaths, profile: Profile) -> None:
     report = None
     with gpu_stage("reconstruct", paths.logs):
         if ingest_meta["track"] == Track.FAST.value:
+            odometry = sensor_track.read_odometry(paths.raw / "odometry.csv")
+            rows = sensor_track.rows_for(odometry, ingest_meta["source_indices"])
             recon, report = sensor_track.reconstruct(
                 paths.raw,
                 frames,
                 ingest_meta["source_indices"],
-                mast3r=lambda: mast3r_sfm.reconstruct(frames, profile, cache_dir=paths.recon / "cache"),
+                mast3r=lambda: mast3r_sfm.reconstruct(
+                    frames, profile, cache_dir=paths.recon / "cache",
+                    init=sensor_track.mast3r_init(frames, odometry.intrinsics[rows]),
+                ),
             )
         else:
             recon = mast3r_sfm.reconstruct(frames, profile, cache_dir=paths.recon / "cache")

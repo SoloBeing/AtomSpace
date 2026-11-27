@@ -16,12 +16,13 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+from PIL import Image, ImageOps
 
 from ..ingest.stray import find_sidecars, read_confidence, read_depth_m, read_odometry
 from .align import robust_similarity
 from .export import Reconstruction
 from .lidar import sample_colors, scale_intrinsics, unproject
-from .mast3r_sfm import voxel_downsample
+from .mast3r_sfm import to_network_pixels, voxel_downsample
 
 # ARKit's world frame is gravity-aligned, so up is +Y by construction.
 WORLD_UP = np.array([0.0, 1.0, 0.0])
@@ -56,7 +57,7 @@ def reconstruct(
         )
 
     odometry = read_odometry(recording.odometry)
-    rows = _rows_for(odometry, source_indices)
+    rows = rows_for(odometry, source_indices)
     cam_to_world = odometry.cam_to_world[rows]
     intrinsics = odometry.intrinsics[rows]
 
@@ -103,7 +104,7 @@ def reconstruct(
     return recon, report
 
 
-def _rows_for(odometry, source_indices: list[int]) -> np.ndarray:
+def rows_for(odometry, source_indices: list[int]) -> np.ndarray:
     """Positions in odometry.csv of the recording frames the keyframes came from."""
     lookup = {int(frame): row for row, frame in enumerate(odometry.frames)}
     missing = [i for i in source_indices if i not in lookup]
@@ -143,3 +144,26 @@ def write_world_up(path: Path, up: np.ndarray = WORLD_UP) -> None:
     """Records the known up direction so `navmesh` can fix the floor's normal to gravity."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps({"world_up": list(map(float, up))}, indent=2))
+
+
+def mast3r_init(frames: list[Path], intrinsics: np.ndarray) -> dict[str, dict[str, np.ndarray]]:
+    """MASt3R's per-image `init`, carrying the camera's measured intrinsics.
+
+    `sparse_scene_optimizer` accepts three keys, and only one of them is usable here:
+
+    - `intrinsics` works, and ARKit's are measured rather than solved, so they are a better
+      starting point than MASt3R's own estimate. This is what the function returns.
+    - `cam2w` reaches `assert False, 'inverse kinematic chain not yet implemented'`
+      (sparse_ga.py:247) on the pinned commit and on upstream main, which is why this track
+      overrides the poses after alignment instead of seeding them.
+    - `depthmap` replaces `core_depth[idx]`, which `condense_data` fills from each image's
+      canonical-view *anchors*: a one-dimensional vector over pixels chosen inside
+      `sparse_global_alignment`, whose length and positions the caller cannot know in
+      advance. Seeding LiDAR depth there would mean substituting it as those anchors are
+      built, inside `prepare_canonical_data`, rather than passing a value in. Not attempted.
+    """
+    out = {}
+    for frame, K in zip(frames, intrinsics):
+        width, height = ImageOps.exif_transpose(Image.open(frame)).size
+        out[str(frame)] = {"intrinsics": to_network_pixels(K, (width, height))}
+    return out

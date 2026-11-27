@@ -1,0 +1,237 @@
+import json
+
+import cv2
+import numpy as np
+import pytest
+from scipy.spatial.transform import Rotation
+
+from atomspace.config import ScenePaths
+from atomspace.ingest.stray import ARKIT_TO_OPENCV
+from atomspace.reconstruct.export import Reconstruction
+from atomspace.reconstruct.scale import ScaleReference, metric_factor, save_reference
+from atomspace.reconstruct.sensor_track import RESIDUAL_LIMIT_M, WORLD_UP, reconstruct
+
+HEADER = (
+    "timestamp, frame, x, y, z, qx, qy, qz, qw, fx, fy, cx, cy,"
+    " distortion_center_x, distortion_center_y\n"
+)
+DEPTH_SIZE = (32, 24)  # (width, height), the same 4:3 the real 256x192 map has
+COLOR_SIZE = (240, 180)
+FOCAL = 180.0  # colour-frame pixels
+
+
+def _poses(n=8):
+    """A loop around a room at varying height, so the trajectory is not collinear."""
+    angle = np.linspace(0, 2 * np.pi, n, endpoint=False)
+    out = np.tile(np.eye(4), (n, 1, 1))
+    for i, a in enumerate(angle):
+        # Face inward, i.e. rotate about ARKit's up by the angle around the circle.
+        out[i, :3, :3] = Rotation.from_rotvec(a * np.array([0.0, 1.0, 0.0])).as_matrix()
+        out[i, :3, 3] = [2.0 * np.cos(a), 1.4 + 0.1 * (i % 3), 2.0 * np.sin(a)]
+    return out
+
+
+@pytest.fixture
+def scene(tmp_path):
+    """A recording folder plus its extracted keyframes. Every depth pixel reads 2 m, so the
+    cloud is one patch per camera at a known distance."""
+    raw = tmp_path / "raw"
+    frames_dir = tmp_path / "frames"
+    (raw / "depth").mkdir(parents=True)
+    (raw / "confidence").mkdir()
+    frames_dir.mkdir()
+
+    poses = _poses()
+    rows = []
+    for i, pose in enumerate(poses):
+        position = pose[:3, 3]
+        quaternion = Rotation.from_matrix(pose[:3, :3]).as_quat()  # x, y, z, w
+        rows.append(
+            f"{i / 30:.4f}, {i:06d}, {position[0]}, {position[1]}, {position[2]}, "
+            f"{quaternion[0]}, {quaternion[1]}, {quaternion[2]}, {quaternion[3]}, "
+            f"{FOCAL}, {FOCAL}, {(COLOR_SIZE[0] - 1) / 2}, {(COLOR_SIZE[1] - 1) / 2}, ,\n"
+        )
+        cv2.imwrite(str(raw / "depth" / f"{i:06d}.png"), np.full(DEPTH_SIZE[::-1], 2000, np.uint16))
+        cv2.imwrite(str(raw / "confidence" / f"{i:06d}.png"), np.full(DEPTH_SIZE[::-1], 2, np.uint8))
+        colour = np.zeros((*COLOR_SIZE[::-1], 3), np.uint8)
+        colour[:, :] = (i * 10, 100, 200)  # BGR
+        cv2.imwrite(str(frames_dir / f"{i:05d}.jpg"), colour)
+
+    (raw / "odometry.csv").write_text(HEADER + "".join(rows))
+    (raw / "rgb.mp4").write_bytes(b"")
+    frames = sorted(frames_dir.glob("*.jpg"))
+    return raw, frames, list(range(len(frames))), poses
+
+
+def _stub_mast3r(truth_points, poses, scale, seed=0, pose_noise_m=0.0):
+    """A MASt3R whose reconstruction is the truth in its own arbitrary frame: rotated,
+    translated and scaled, exactly the relationship the alignment has to undo."""
+    rotation = Rotation.from_rotvec([0.3, -0.7, 0.2]).as_matrix()
+    offset = np.array([4.0, -2.0, 9.0])
+    rng = np.random.default_rng(seed)
+
+    def to_mast3r(points):
+        return (points - offset) @ rotation / scale
+
+    def run():
+        centres = to_mast3r(poses[:, :3, 3])
+        if pose_noise_m:
+            centres = centres + rng.normal(0, pose_noise_m / scale, centres.shape)
+        cam_to_world = np.tile(np.eye(4), (len(poses), 1, 1))
+        cam_to_world[:, :3, 3] = centres
+        return Reconstruction(
+            image_names=[f"{i:05d}.jpg" for i in range(len(poses))],
+            intrinsics=np.tile(np.eye(3), (len(poses), 1, 1)),
+            cam_to_world=cam_to_world,
+            points=to_mast3r(truth_points).astype(np.float32),
+            colors=np.zeros((len(truth_points), 3), np.uint8),
+        )
+
+    return run
+
+
+def test_sensor_track_without_mast3r_uses_lidar_alone(scene):
+    raw, frames, indices, poses = scene
+
+    recon, report = reconstruct(raw, frames, indices, mast3r=None)
+
+    assert len(recon.cam_to_world) == len(frames)
+    assert len(recon.points) > 0
+    assert report["residual_m"] is None
+    assert report["mast3r_points"] == 0
+    assert report["scale_source"] == "sensor"
+
+
+def test_lidar_points_land_at_the_measured_depth(scene):
+    """One camera, so every point's provenance is known. Depth reads a flat 2 m, so the
+    nearest point sits 2 m away along the optical axis and the rest fan out behind it."""
+    raw, frames, _, poses = scene
+
+    recon, _ = reconstruct(raw, [frames[0]], [0], mast3r=None)
+
+    distances = np.linalg.norm(recon.points - poses[0, :3, 3], axis=1)
+    np.testing.assert_allclose(distances.min(), 2.0, atol=0.01)
+    assert distances.min() >= 2.0  # 2 m is the depth along z, so nothing is closer
+
+
+def test_poses_are_arkits_and_metric(scene):
+    """MASt3R's poses here are deliberately wrong — identity rotations in a shrunken frame.
+    The output must carry ARKit's."""
+    raw, frames, indices, poses = scene
+    truth, _ = reconstruct(raw, frames, indices, mast3r=None)
+
+    recon, _ = reconstruct(raw, frames, indices, mast3r=_stub_mast3r(truth.points, poses, scale=3.0))
+
+    np.testing.assert_allclose(recon.cam_to_world, poses @ ARKIT_TO_OPENCV, atol=1e-9)
+
+
+def test_mast3r_points_are_mapped_into_arkit_metres(scene):
+    raw, frames, indices, poses = scene
+    truth, _ = reconstruct(raw, frames, indices, mast3r=None)
+
+    recon, report = reconstruct(
+        raw, frames, indices, mast3r=_stub_mast3r(truth.points, poses, scale=3.0)
+    )
+
+    assert report["residual_m"] < 1e-6
+    assert report["scale_source"] == "sensor"
+    assert report["mast3r_points"] > 0
+    # Every mapped MASt3R point must coincide with a LiDAR point it was built from.
+    extent = recon.points.max(axis=0) - recon.points.min(axis=0)
+    np.testing.assert_allclose(extent, truth.points.max(axis=0) - truth.points.min(axis=0), atol=0.02)
+
+
+def test_a_bad_residual_withholds_metric_scale(scene):
+    """Quality first: the pipeline does not label geometry metric that it has just measured
+    as badly aligned, so the scene stays recoverable by the manual scale tool instead."""
+    raw, frames, indices, poses = scene
+    truth, _ = reconstruct(raw, frames, indices, mast3r=None)
+    noisy = _stub_mast3r(truth.points, poses, scale=3.0, pose_noise_m=0.5)
+
+    _, report = reconstruct(raw, frames, indices, mast3r=noisy)
+
+    assert report["residual_m"] > RESIDUAL_LIMIT_M
+    assert report["scale_source"] == "unscaled"
+    assert "residual" in report["warning"]
+
+
+def test_report_names_arkits_world_up(scene):
+    raw, frames, indices, _ = scene
+    _, report = reconstruct(raw, frames, indices, mast3r=None)
+    np.testing.assert_array_equal(report["world_up"], WORLD_UP)
+
+
+def test_only_the_keyframes_odometry_rows_are_used(scene):
+    """Ingest keeps a fraction of the frames, so the rows are selected by source index and
+    not by position in the file."""
+    raw, frames, _, poses = scene
+    picked = [0, 3, 5, 6]
+
+    recon, report = reconstruct(raw, [frames[i] for i in picked], picked, mast3r=None)
+
+    assert report["keyframes"] == len(picked)
+    np.testing.assert_allclose(recon.cam_to_world, poses[picked] @ ARKIT_TO_OPENCV, atol=1e-9)
+
+
+def test_a_missing_depth_frame_is_named(scene):
+    raw, frames, indices, _ = scene
+    (raw / "depth" / "000003.png").unlink()
+
+    with pytest.raises(RuntimeError, match="000003"):
+        reconstruct(raw, frames, indices, mast3r=None)
+
+
+def test_a_recording_without_depth_is_refused(scene, tmp_path):
+    raw, frames, indices, _ = scene
+    for png in (raw / "depth").glob("*.png"):
+        png.unlink()
+    (raw / "depth").rmdir()
+
+    with pytest.raises(RuntimeError, match="depth"):
+        reconstruct(raw, frames, indices, mast3r=None)
+
+
+def test_intrinsics_come_from_the_odometry(scene):
+    raw, frames, indices, _ = scene
+    recon, _ = reconstruct(raw, frames, indices, mast3r=None)
+    np.testing.assert_allclose(recon.intrinsics[:, 0, 0], FOCAL)
+    np.testing.assert_allclose(recon.intrinsics[:, 0, 2], (COLOR_SIZE[0] - 1) / 2)
+
+
+def test_report_is_json_serialisable(scene):
+    raw, frames, indices, _ = scene
+    _, report = reconstruct(raw, frames, indices, mast3r=None)
+    json.loads(json.dumps(report))
+
+
+def _fast_scene(tmp_path, report=None):
+    paths = ScenePaths(tmp_path / "scene")
+    paths.ensure()
+    paths.ingest_meta.write_text(json.dumps({"track": "fast", "keyframes": ["00001.jpg"]}))
+    if report is not None:
+        (paths.logs / "sensor_track.json").write_text(json.dumps(report))
+    return paths
+
+
+def test_metric_factor_trusts_a_sensor_scaled_report(tmp_path):
+    paths = _fast_scene(tmp_path, {"scale_source": "sensor"})
+    assert metric_factor(paths) == (1.0, "sensor")
+
+
+def test_metric_factor_withholds_scale_when_the_report_says_unscaled(tmp_path):
+    """A tripped residual leaves the scene exactly where a vision-only scene starts, so the
+    manual scale tool can still rescue it."""
+    paths = _fast_scene(tmp_path, {"scale_source": "unscaled"})
+    assert metric_factor(paths) is None
+
+
+def test_metric_factor_falls_back_to_the_track_without_a_report(tmp_path):
+    """The ARKitScenes converter writes a fast-track scene without running this stage."""
+    paths = _fast_scene(tmp_path)
+    assert metric_factor(paths) == (1.0, "sensor")
+
+
+def test_a_user_reference_still_wins_over_an_unscaled_report(tmp_path):
+    paths = _fast_scene(tmp_path, {"scale_source": "unscaled"})
+    save_reference(ScaleReference(a=(0, 0, 0), b=(1, 0, 0), distance_m=2.0), paths.scale)
+    assert metric_factor(paths) == (2.0, "user")

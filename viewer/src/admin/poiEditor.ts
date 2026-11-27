@@ -42,12 +42,16 @@ export function mountPoiEditor(viewer: SplatViewer, bundle: SceneBundle, onChang
   aliases.placeholder = 'Other names, comma separated';
   const category = document.createElement('input');
   category.placeholder = 'Category';
+  const portalScene = document.createElement('input');
+  portalScene.placeholder = 'Doorway to scene (optional)';
+  const portalArrive = document.createElement('input');
+  portalArrive.placeholder = 'Arrive at POI id there (optional)';
   const save = document.createElement('button');
   save.textContent = 'Save POI from this view';
   const status = document.createElement('p');
   status.setAttribute('role', 'status');
   const list = document.createElement('ul');
-  panel.append(place, name, aliases, category, save, status, list);
+  panel.append(place, name, aliases, category, portalScene, portalArrive, save, status, list);
 
   const persist = async (next: Poi[], done: string): Promise<boolean> => {
     try {
@@ -67,7 +71,8 @@ export function mountPoiEditor(viewer: SplatViewer, bundle: SceneBundle, onChang
     list.replaceChildren(
       ...pois.map((poi) => {
         const item = document.createElement('li');
-        item.textContent = poi.name;
+        // The id is what another scene's doorway names in "Arrive at POI id".
+        item.textContent = poi.portal ? `${poi.name} (${poi.id}) → ${poi.portal.scene}` : `${poi.name} (${poi.id})`;
         const remove = document.createElement('button');
         remove.textContent = 'Delete';
         remove.setAttribute('aria-label', `Delete ${poi.name}`);
@@ -108,10 +113,14 @@ export function mountPoiEditor(viewer: SplatViewer, bundle: SceneBundle, onChang
     const otherNames = aliases.value.split(',').map((s) => s.trim()).filter(Boolean);
     if (otherNames.length > 0) poi.aliases = otherNames;
     if (category.value.trim()) poi.category = category.value.trim();
+    if (portalScene.value.trim()) {
+      poi.portal = { scene: portalScene.value.trim() };
+      if (portalArrive.value.trim()) poi.portal.arrive = portalArrive.value.trim();
+    }
 
     if (await persist([...pois, poi], `Saved ${poiName}.`)) {
       placed = null;
-      name.value = aliases.value = category.value = '';
+      name.value = aliases.value = category.value = portalScene.value = portalArrive.value = '';
       refreshPlace();
     }
   });

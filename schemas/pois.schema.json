@@ -30,6 +30,16 @@
               "target": { "$ref": "#/$defs/vec3" }
             }
           },
+          "portal": {
+            "description": "Makes this POI a doorway: walking up to it offers to enter another scene.",
+            "type": "object",
+            "required": ["scene"],
+            "additionalProperties": false,
+            "properties": {
+              "scene": { "type": "string", "pattern": "^[A-Za-z0-9_-]+$", "description": "Scene folder name to load." },
+              "arrive": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$", "description": "POI id in that scene to land at." }
+            }
+          },
           "source": { "enum": ["manual", "auto"] }
         }
       }

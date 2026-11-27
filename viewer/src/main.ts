@@ -20,17 +20,28 @@ import { mountControlsHint } from './ui/controlsHint';
 import { mountFpsCounter } from './ui/fpsCounter';
 import { mountLoadingScreen } from './ui/loadingScreen';
 import { mountPoiCard } from './ui/poiCard';
+import { mountPortalPrompt, portalInReach, portalUrl } from './ui/portal';
 import { formatDistance, mountRouteStatus } from './ui/routeStatus';
 import { mountSearchBar } from './ui/searchBar';
 import { mountWorldCarousel, mountWorldsLink } from './ui/worldCarousel';
 
-async function start(app: HTMLElement, sceneName: string, admin: boolean) {
-  const loading = mountLoadingScreen(app);
+async function start(app: HTMLElement, sceneName: string, params: URLSearchParams) {
+  const admin = params.has('admin');
+  const loading = mountLoadingScreen(app, sceneName, params.has('via'));
   const bundle = await loadScene(sceneName);
   const guard = bundle.navmesh ? new NavmeshGuard(bundle.navmesh) : null;
-  // Without a navmesh the first camera is at the origin, already at its own height.
-  const startPosition = guard ? guard.spawnPosition() : new THREE.Vector3();
+  // Came through a doorway: land at the POI it names (usually the doorway back) instead of the default spawn.
+  const arrival = bundle.pois.find((poi) => poi.id === params.get('arrive') && poi.view);
+  let startPosition: THREE.Vector3;
+  if (arrival?.view) {
+    const [x, y, z] = arrival.view.position;
+    startPosition = guard ? guard.nearestPosition(x, z) : new THREE.Vector3(x, y, z);
+  } else {
+    // Without a navmesh the first camera is at the origin, already at its own height.
+    startPosition = guard ? guard.spawnPosition() : new THREE.Vector3();
+  }
   const viewer = await createSplatViewer(app, bundle, startPosition, loading.setProgress);
+  if (arrival) faceArrival(viewer.camera, arrival);
   loading.remove();
 
   const controls = new FirstPersonControls(viewer.camera, viewer.domElement);
@@ -47,6 +58,8 @@ async function start(app: HTMLElement, sceneName: string, admin: boolean) {
   // The FPS counter, route banner and POI card are mounted before the search bar, so its results draw over them.
   viewer.onFrame(mountFpsCounter(app));
   const pins = createPins(viewer.scene, bundle.pois);
+  let livePois = bundle.pois; // the admin POI editor can add doorways while you walk
+  const portalPrompt = mountPortalPrompt(app, touch, (poi) => location.assign(portalUrl(poi, params)));
   let search = createPoiSearch(bundle.pois);
   const pathfinder = bundle.navmesh ? new Pathfinder(bundle.navmesh) : null;
   // Cancelling stops the route, which hides the banner.
@@ -119,6 +132,7 @@ async function start(app: HTMLElement, sceneName: string, admin: boolean) {
     mountPoiEditor(viewer, bundle, (pois) => {
       pins.update(pois);
       search = createPoiSearch(pois);
+      livePois = pois;
     });
   } else {
     mountWorldsLink(app); // shares the top right corner with the admin panels
@@ -143,8 +157,18 @@ async function start(app: HTMLElement, sceneName: string, admin: boolean) {
       bob.set(0, 0, 0);
     }
     bob.y += controls.airborne(dt); // after the move: tryMove resets the camera to eye height
+    portalPrompt.offer(portalInReach(livePois, position.x, position.z));
     position.add(bob);
   });
+}
+
+/** Arriving at a doorway, face away from it into the room; arriving at anything else, face it. Level gaze. */
+function faceArrival(camera: THREE.PerspectiveCamera, poi: Poi): void {
+  const [x, , z] = poi.position;
+  const ahead = poi.portal
+    ? new THREE.Vector3(2 * camera.position.x - x, camera.position.y, 2 * camera.position.z - z)
+    : new THREE.Vector3(x, camera.position.y, z);
+  camera.lookAt(ahead);
 }
 
 async function chooseWorld(app: HTMLElement) {
@@ -165,7 +189,7 @@ if (!scene) {
     app.textContent = 'No worlds found. Add ?scene=<name> to the URL.';
   });
 } else {
-  start(app, scene, params.has('admin')).catch((err) => {
+  start(app, scene, params).catch((err) => {
     console.error(err);
     app.textContent = `Could not load scene "${scene}": ${err.message}`;
   });

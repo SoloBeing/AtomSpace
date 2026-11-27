@@ -30,6 +30,8 @@ export interface Poi {
   category?: string;
   position: Vec3;
   view?: { position: Vec3; target: Vec3 };
+  /** A doorway to another scene; `arrive` is the POI id there to land at. */
+  portal?: { scene: string; arrive?: string };
   source: 'manual' | 'auto';
 }
 

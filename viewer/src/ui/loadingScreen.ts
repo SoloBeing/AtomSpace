@@ -3,12 +3,15 @@ export interface LoadingScreen {
   remove(): void;
 }
 
-/** Full-screen title and progress bar, covering the page until `what` has loaded. */
-export function mountLoadingScreen(container: HTMLElement, what = 'scene'): LoadingScreen {
+/**
+ * Full-screen title and progress bar, covering the page until `what` has loaded. `throughPortal`
+ * gives arriving through a doorway its own look, so it reads as moving on, not starting over.
+ */
+export function mountLoadingScreen(container: HTMLElement, what = 'scene', throughPortal = false): LoadingScreen {
   const root = document.createElement('div');
-  root.className = 'loading';
+  root.className = throughPortal ? 'loading portal' : 'loading';
   const title = document.createElement('h1');
-  title.textContent = 'AtomSpace';
+  title.textContent = throughPortal ? 'Entering the next room' : 'AtomSpace';
   const bar = document.createElement('div');
   bar.className = 'loading-bar';
   bar.setAttribute('role', 'progressbar');

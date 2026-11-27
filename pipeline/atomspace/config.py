@@ -50,7 +50,9 @@ class NavmeshConfig:
     ankle_height_m: float = 0.15
     max_climb_m: float = 0.2
     cell_size_m: float = 0.05
-    min_blocked_points: int = 3  # fewer than this in a cell is floating noise, not an obstacle
+    # Fewer than this in a cell is floating noise, not an obstacle. shortcut: a raw count assumes a
+    # clite-like cloud density (2M points); retune if a denser or sparser cloud blocks haze or opens furniture.
+    min_blocked_points: int = 4
     floor_gap_fill_m: float = 0.15
     walked_radius_m: float = 0.3
 

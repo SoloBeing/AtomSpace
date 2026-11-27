@@ -23,10 +23,23 @@ describe('NavmeshGuard', () => {
     expect(guard.floorHeightAt(1, 2.1)).toBeNull();
   });
 
-  it('dead stops at the edge instead of sliding along it', () => {
+  it('slides along the edge when a step would leave the navmesh', () => {
     const position = new THREE.Vector3(1, EYE_HEIGHT_M, 0.05);
     const diagonal = new THREE.Vector3(0.2, 0, -0.1);
-    expect(guard.tryMove(position, diagonal).toArray()).toEqual(position.toArray());
+    const moved = guard.tryMove(position, diagonal);
+    expect(moved.x).toBeCloseTo(1.2); // the along-the-edge part of the step survives
+    expect(moved.z).toBeCloseTo(0.05);
+  });
+
+  it('stops dead when walking straight into an edge', () => {
+    const position = new THREE.Vector3(1, EYE_HEIGHT_M, 0.05);
+    const moved = guard.tryMove(position, new THREE.Vector3(0, 0, -0.1));
+    expect(moved.distanceTo(position)).toBeCloseTo(0);
+  });
+
+  it('stops dead in a corner', () => {
+    const position = new THREE.Vector3(0.05, EYE_HEIGHT_M, 0.05);
+    expect(guard.tryMove(position, new THREE.Vector3(-0.1, 0, -0.1)).toArray()).toEqual(position.toArray());
   });
 
   it('keeps the camera at eye height while walking', () => {

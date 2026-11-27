@@ -12,12 +12,26 @@ type Triangle = [Vec3, Vec3, Vec3];
 
 export class NavmeshGuard {
   private readonly triangles: Triangle[];
+  /** Outline edges of the walkable area (used by exactly one polygon), as [x0, z0, x1, z1]. */
+  private readonly boundary: [number, number, number, number][];
 
   constructor(navmesh: Navmesh) {
     // Polygons are convex, so a fan covers them exactly.
     this.triangles = navmesh.polygons.flatMap(({ v }) =>
       v.slice(1, -1).map((_, i): Triangle => [navmesh.vertices[v[0]], navmesh.vertices[v[i + 1]], navmesh.vertices[v[i + 2]]]),
     );
+    const uses = new Map<string, number>();
+    const key = (a: number, b: number) => (a < b ? `${a},${b}` : `${b},${a}`);
+    for (const { v } of navmesh.polygons) {
+      for (let i = 0; i < v.length; i++) {
+        const k = key(v[i], v[(i + 1) % v.length]);
+        uses.set(k, (uses.get(k) ?? 0) + 1);
+      }
+    }
+    this.boundary = [...uses].filter(([, n]) => n === 1).map(([k]) => {
+      const [a, b] = k.split(',').map((i) => navmesh.vertices[Number(i)]);
+      return [a[0], a[2], b[0], b[2]];
+    });
   }
 
   /** Floor height at (x, z), or null if that point is outside the walkable navmesh. */
@@ -35,13 +49,39 @@ export class NavmeshGuard {
     return null;
   }
 
-  /** Lookahead check: if the next step leaves the navmesh, the camera doesn't move at all (no wall sliding). */
+  /**
+   * Lookahead check: a step that would leave the navmesh slides along the edge it hits instead
+   * (only the part of the step running along that edge), and stops dead if even that leaves.
+   */
   tryMove(position: THREE.Vector3, delta: THREE.Vector3): THREE.Vector3 {
-    const next = position.clone().add(delta);
-    const floorY = this.floorHeightAt(next.x, next.z);
-    if (floorY === null) return position.clone();
-    next.y = floorY + EYE_HEIGHT_M;
-    return next;
+    const onMesh = (step: THREE.Vector3): THREE.Vector3 | null => {
+      const next = position.clone().add(step);
+      const floorY = this.floorHeightAt(next.x, next.z);
+      return floorY === null ? null : next.setY(floorY + EYE_HEIGHT_M);
+    };
+    const direct = onMesh(delta);
+    if (direct) return direct;
+    const edge = this.nearestBoundaryEdge(position.x + delta.x, position.z + delta.z);
+    if (!edge) return position.clone();
+    const along = new THREE.Vector3(edge[2] - edge[0], 0, edge[3] - edge[1]).normalize();
+    return onMesh(along.multiplyScalar(along.dot(delta))) ?? position.clone();
+  }
+
+  private nearestBoundaryEdge(x: number, z: number): [number, number, number, number] | null {
+    let best: [number, number, number, number] | null = null;
+    let bestDistance = Infinity;
+    for (const e of this.boundary) {
+      const [x0, z0, x1, z1] = e;
+      const dx = x1 - x0;
+      const dz = z1 - z0;
+      const t = THREE.MathUtils.clamp(((x - x0) * dx + (z - z0) * dz) / (dx * dx + dz * dz || 1), 0, 1);
+      const distance = (x0 + t * dx - x) ** 2 + (z0 + t * dz - z) ** 2;
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = e;
+      }
+    }
+    return best;
   }
 
   /** The closest eye-height camera position on the navmesh to (x, z). */

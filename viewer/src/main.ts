@@ -116,13 +116,25 @@ async function start(app: HTMLElement, sceneName: string, admin: boolean) {
     mountWorldsLink(app); // shares the top right corner with the admin panels
   }
 
+  const bob = new THREE.Vector3(); // head-bob offset currently baked into the camera position
   viewer.onFrame((dt) => {
-    if (flying) return;
+    if (flying) {
+      bob.set(0, 0, 0); // flyTo owns the camera; a couple of cm left from the last step don't matter
+      controls.stop();
+      return;
+    }
     const position = viewer.camera.position;
+    position.sub(bob); // walk from where the body is, not the bobbing head
     const delta = controls.desiredMove(dt);
-    if (delta.lengthSq() === 0) return;
-    position.copy(guard ? guard.tryMove(position, delta) : position.clone().add(delta));
-    directions?.update(toFloor(position));
+    if (delta.lengthSq() > 0) {
+      const before = position.clone();
+      position.copy(guard ? guard.tryMove(position, delta) : position.clone().add(delta));
+      directions?.update(toFloor(position));
+      bob.copy(controls.headBob(position.distanceTo(before), dt));
+    } else {
+      bob.set(0, 0, 0);
+    }
+    position.add(bob);
   });
 }
 

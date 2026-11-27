@@ -2,7 +2,9 @@ import cv2
 import numpy as np
 import pytest
 
-from atomspace.ingest.stray import find_recording, read_confidence, read_depth_m, read_odometry
+from atomspace.ingest.stray import (
+    find_recording, find_sidecars, read_confidence, read_depth_m, read_odometry,
+)
 
 HEADER = (
     "timestamp, frame, x, y, z, qx, qy, qz, qw, fx, fy, cx, cy,"
@@ -110,3 +112,20 @@ def test_read_confidence_keeps_the_raw_levels(tmp_path):
     got = read_confidence(path)
     assert got.dtype == np.uint8
     np.testing.assert_array_equal(got, [[0, 1], [2, 2]])
+
+
+def test_find_sidecars_does_not_need_the_video(tmp_path):
+    """A scene's raw/ folder holds the sidecars beside a video ingest renamed to input.mp4,
+    so the reconstruct stage identifies a recording by its odometry, not its video."""
+    recording = _recording(tmp_path)
+    (tmp_path / "rgb.mp4").rename(tmp_path / "input.mp4")
+
+    assert find_recording(recording) is None  # strict: ingest needs rgb.mp4
+    found = find_sidecars(recording)
+    assert found is not None and found.video is None
+    assert found.depth is not None and found.confidence is not None
+
+
+def test_find_sidecars_needs_odometry(tmp_path):
+    (tmp_path / "depth").mkdir()
+    assert find_sidecars(tmp_path) is None

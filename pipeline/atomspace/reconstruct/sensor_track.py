@@ -17,7 +17,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from ..ingest.stray import find_recording, read_confidence, read_depth_m, read_odometry
+from ..ingest.stray import find_sidecars, read_confidence, read_depth_m, read_odometry
 from .align import robust_similarity
 from .export import Reconstruction
 from .lidar import sample_colors, scale_intrinsics, unproject
@@ -46,9 +46,9 @@ def reconstruct(
     because blur and motion filtering discard most frames. `mast3r`, when given, is called
     to produce the up-to-scale vision reconstruction that fills in beyond the sensor's range.
     """
-    recording = find_recording(raw_dir)
+    recording = find_sidecars(raw_dir)
     if recording is None:
-        raise RuntimeError(f"{raw_dir} is not a Stray Scanner recording (no odometry.csv or rgb.mp4).")
+        raise RuntimeError(f"{raw_dir} holds no odometry.csv, so it is not a Stray Scanner recording.")
     if recording.depth is None or recording.confidence is None:
         raise RuntimeError(
             f"{raw_dir} has no depth/ or confidence/ folder, so there is no LiDAR geometry to "

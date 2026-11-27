@@ -29,10 +29,11 @@ DEPTH_SCALE = 1000.0  # depth PNGs hold millimetres
 
 @dataclass(frozen=True)
 class Recording:
-    """A Stray Scanner capture folder. `depth` and `confidence` are None when absent."""
+    """A Stray Scanner capture folder. `depth` and `confidence` are None when absent, and
+    `video` is None for a scene's own raw/ folder, where ingest has already renamed it."""
 
     root: Path
-    video: Path
+    video: Path | None
     odometry: Path
     depth: Path | None
     confidence: Path | None
@@ -49,14 +50,33 @@ class Odometry:
 
 
 def find_recording(path: Path) -> Recording | None:
-    """The recording at `path`, or None if it isn't one. A plain video file is not one."""
+    """The recording to ingest at `path`, or None if it isn't one. A plain video file is not
+    one, and neither is a folder without the capture's own `rgb.mp4`."""
+    found = find_sidecars(path)
+    if found is None or not (path / VIDEO_NAME).is_file():
+        return None
+    return Recording(
+        root=found.root,
+        video=path / VIDEO_NAME,
+        odometry=found.odometry,
+        depth=found.depth,
+        confidence=found.confidence,
+    )
+
+
+def find_sidecars(path: Path) -> Recording | None:
+    """The same folder identified by its odometry alone, for stages that run after ingest.
+
+    A scene's `raw/` holds the copied sidecars beside a video ingest renamed to `input.<ext>`,
+    and by then the keyframes have already been extracted, so the video is of no further use.
+    """
     if not path.is_dir():
         return None
-    video, odometry = path / VIDEO_NAME, path / ODOMETRY_NAME
-    if not (video.is_file() and odometry.is_file()):
+    odometry = path / ODOMETRY_NAME
+    if not odometry.is_file():
         return None
     optional = [path / name if (path / name).is_dir() else None for name in ("depth", "confidence")]
-    return Recording(root=path, video=video, odometry=odometry, depth=optional[0], confidence=optional[1])
+    return Recording(root=path, video=None, odometry=odometry, depth=optional[0], confidence=optional[1])
 
 
 def read_odometry(path: Path) -> Odometry:

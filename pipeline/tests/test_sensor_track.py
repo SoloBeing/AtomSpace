@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -235,3 +236,41 @@ def test_a_user_reference_still_wins_over_an_unscaled_report(tmp_path):
     paths = _fast_scene(tmp_path, {"scale_source": "unscaled"})
     save_reference(ScaleReference(a=(0, 0, 0), b=(1, 0, 0), distance_m=2.0), paths.scale)
     assert metric_factor(paths) == (2.0, "user")
+
+
+def test_reconstruct_reads_a_scene_raw_folder(scene):
+    """ingest copies the video in as `input.mp4`, not `rgb.mp4`, and the frames are already
+    extracted by the time this stage runs. The sidecars are what it actually needs."""
+    raw, frames, indices, poses = scene
+    (raw / "rgb.mp4").rename(raw / "input.mp4")
+
+    recon, report = reconstruct(raw, frames, indices, mast3r=None)
+
+    assert len(recon.points) > 0
+    assert report["scale_source"] == "sensor"
+
+
+FIXTURE = Path(__file__).resolve().parents[2] / "test" / "strayroom"
+
+
+@pytest.mark.skipif(not FIXTURE.is_dir(), reason="fixture not generated")
+def test_the_committed_fixture_reconstructs_a_box_room():
+    """The room is 4 m by 3 m with a 2.6 m ceiling. Recovering those three numbers from
+    millimetre depth at a seventh of the colour resolution is the whole arithmetic chain:
+    get the intrinsics rescale or the pose convention wrong and the box comes out the wrong
+    size or sheared, while still looking like a room."""
+    frames = sorted((FIXTURE / "frames").glob("*.jpg"))
+    indices = [int(f.stem) for f in frames]
+
+    recon, report = reconstruct(FIXTURE / "raw", frames, indices, mast3r=None)
+
+    extent = recon.points.max(axis=0) - recon.points.min(axis=0)
+    np.testing.assert_allclose(sorted(extent), [2.6, 3.0, 4.0], atol=0.05)
+    assert report["scale_source"] == "sensor"
+
+
+@pytest.mark.skipif(not FIXTURE.is_dir(), reason="fixture not generated")
+def test_the_fixture_sits_on_the_floor_at_zero():
+    frames = sorted((FIXTURE / "frames").glob("*.jpg"))
+    recon, _ = reconstruct(FIXTURE / "raw", frames, [int(f.stem) for f in frames], mast3r=None)
+    assert recon.points[:, 1].min() == pytest.approx(0.0, abs=0.03)

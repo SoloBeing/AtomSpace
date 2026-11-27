@@ -5,6 +5,7 @@ A recording is a folder holding `rgb.mp4` (HEVC), `odometry.csv`, `imu.csv` and 
 without `depth/` the capture still has metric poses, just no measured geometry.
 """
 
+import math
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -94,7 +95,7 @@ def read_odometry(path: Path) -> Odometry:
     rows = [line.split(",") for line in lines[1:] if line.strip()]
     if not rows:
         raise ValueError(f"{path.name} has a header but no rows")
-    values = np.array([[_float(cell) for cell in row[:13]] for row in rows])
+    values = np.array([_pose_row(row, path, number) for number, row in enumerate(rows, start=1)])
 
     quaternions = Rotation.from_quat(values[:, 5:9])  # scipy takes x, y, z, w — the file's order
     cam_to_world = np.tile(np.eye(4), (len(values), 1, 1))
@@ -133,7 +134,27 @@ def read_confidence(path: Path) -> np.ndarray:
     return image.astype(np.uint8)
 
 
-def _float(cell: str) -> float:
-    """Empty cells (an absent distortion centre) read as NaN rather than failing."""
-    text = cell.strip()
-    return float(text) if text else float("nan")
+def _pose_row(row: list[str], path: Path, number: int) -> list[float]:
+    """The thirteen pose and intrinsics columns of one row, as finite floats.
+
+    Only the two distortion columns after them may be blank. A blank or unreadable value
+    anywhere here would otherwise become NaN, travel into the camera pose, and spread through
+    every point built from that frame without anything failing.
+    """
+    if len(row) < 13:
+        raise ValueError(
+            f"{path.name} row {number} has {len(row)} columns, expected at least 13. "
+            "The recording may have been interrupted mid-write."
+        )
+    out = []
+    for column, cell in zip(ODOMETRY_COLUMNS, row[:13]):
+        try:
+            value = float(cell.strip())
+        except ValueError:
+            raise ValueError(
+                f"{path.name} row {number} has no usable {column}: {cell.strip()!r}"
+            ) from None
+        if not math.isfinite(value):
+            raise ValueError(f"{path.name} row {number} has a non-finite {column}: {value}")
+        out.append(value)
+    return out

@@ -129,3 +129,19 @@ def test_find_sidecars_does_not_need_the_video(tmp_path):
 def test_find_sidecars_needs_odometry(tmp_path):
     (tmp_path / "depth").mkdir()
     assert find_sidecars(tmp_path) is None
+
+
+def test_read_odometry_rejects_a_blank_pose_value(tmp_path):
+    """An empty cell is legitimate only in the two distortion columns. Anywhere else it would
+    become NaN, travel into the pose, and poison the whole cloud silently."""
+    path = tmp_path / "odometry.csv"
+    path.write_text(HEADER + "0.0, 000000, , 2, 3, 0, 0, 0, 1, 1500, 1500, 960, 720, ,\r\n")
+    with pytest.raises(ValueError, match="row 1"):
+        read_odometry(path)
+
+
+def test_read_odometry_names_the_file_on_a_truncated_row(tmp_path):
+    path = tmp_path / "odometry.csv"
+    path.write_text(HEADER + "0.0, 000000, 1, 2, 3\r\n")
+    with pytest.raises(ValueError, match="odometry.csv"):
+        read_odometry(path)

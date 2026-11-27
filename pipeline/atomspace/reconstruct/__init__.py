@@ -20,6 +20,7 @@ def run(paths: ScenePaths, profile: Profile) -> None:
                 paths.raw,
                 frames,
                 ingest_meta["source_indices"],
+                capture_size=(ingest_meta["meta"]["width"], ingest_meta["meta"]["height"]),
                 mast3r=lambda: mast3r_sfm.reconstruct(
                     frames, profile, cache_dir=paths.recon / "cache",
                     init=sensor_track.mast3r_init(frames, odometry.intrinsics[rows]),

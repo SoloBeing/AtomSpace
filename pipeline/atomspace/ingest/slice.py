@@ -39,6 +39,13 @@ def extract_strided_frames(
         text=True,
     )
     if result.returncode != 0:
+        if "fps_mode" in result.stderr:
+            raise RuntimeError(
+                "This ffmpeg is too old for the sensor track: -fps_mode arrived in ffmpeg 5. "
+                "Without it ffmpeg pads the output to a constant frame rate, and every keyframe "
+                "would be paired with the wrong pose. Install ffmpeg 5 or newer, or use the "
+                f"plain-video track. ffmpeg said: {result.stderr.strip()}"
+            )
         raise RuntimeError(f"ffmpeg frame extraction failed: {result.stderr.strip()}")
 
     frames = sorted(out_dir.glob("*.jpg"))

@@ -89,3 +89,24 @@ def test_collinear_trajectory_is_refused():
 def test_too_few_cameras_is_refused():
     with pytest.raises(RuntimeError, match="at least 3"):
         robust_similarity(np.zeros((2, 3)), np.zeros((2, 3)))
+
+
+def test_a_planar_loop_is_accepted():
+    """A similarity transform needs three non-collinear correspondences, which a plane
+    supplies. Walking a loop at a steady height is the capture this feature exists for, and
+    the fixture's own trajectory is exactly that."""
+    loop = _walk(40)
+    loop[:, 1] = 1.4  # perfectly flat: the out-of-plane extent is zero
+
+    fit = robust_similarity(loop, _transform(loop))
+
+    assert fit.scale == pytest.approx(SCALE, rel=1e-6)
+    assert fit.residual_m < 1e-6
+
+
+def test_a_loop_with_only_handheld_wobble_is_accepted():
+    rng = np.random.default_rng(7)
+    loop = _walk(60)
+    loop[:, 1] = 1.4 + rng.normal(0, 0.03, 60)  # 3 cm of hand wobble
+    fit = robust_similarity(loop, _transform(loop))
+    assert fit.scale == pytest.approx(SCALE, rel=1e-6)

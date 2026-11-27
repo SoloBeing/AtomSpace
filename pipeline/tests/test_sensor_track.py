@@ -32,8 +32,7 @@ def _poses(n=8):
     return out
 
 
-@pytest.fixture
-def scene(tmp_path):
+def _build_scene(tmp_path, poses):
     """A recording folder plus its extracted keyframes. Every depth pixel reads 2 m, so the
     cloud is one patch per camera at a known distance."""
     raw = tmp_path / "raw"
@@ -42,7 +41,6 @@ def scene(tmp_path):
     (raw / "confidence").mkdir()
     frames_dir.mkdir()
 
-    poses = _poses()
     rows = []
     for i, pose in enumerate(poses):
         position = pose[:3, 3]
@@ -62,6 +60,11 @@ def scene(tmp_path):
     (raw / "rgb.mp4").write_bytes(b"")
     frames = sorted(frames_dir.glob("*.jpg"))
     return raw, frames, list(range(len(frames))), poses
+
+
+@pytest.fixture
+def scene(tmp_path):
+    return _build_scene(tmp_path, _poses())
 
 
 def _stub_mast3r(truth_points, poses, scale, seed=0, pose_noise_m=0.0):
@@ -153,7 +156,7 @@ def test_a_bad_residual_withholds_metric_scale(scene):
 
     assert report["residual_m"] > RESIDUAL_LIMIT_M
     assert report["scale_source"] == "unscaled"
-    assert "residual" in report["warning"]
+    assert "too large to call the scene metric" in report["warning"]
 
 
 def test_report_names_arkits_world_up(scene):
@@ -274,3 +277,112 @@ def test_the_fixture_sits_on_the_floor_at_zero():
     frames = sorted((FIXTURE / "frames").glob("*.jpg"))
     recon, _ = reconstruct(FIXTURE / "raw", frames, [int(f.stem) for f in frames], mast3r=None)
     assert recon.points[:, 1].min() == pytest.approx(0.0, abs=0.03)
+
+
+def _mostly_wrong_mast3r(truth_points, poses, scale, good=5, seed=1):
+    """A MASt3R run that drifted: only `good` cameras keep the true relationship. RANSAC
+    finds that small consensus and reports a perfect residual over it."""
+    base = _stub_mast3r(truth_points, poses, scale)
+    rng = np.random.default_rng(seed)
+
+    def run():
+        recon = base()
+        recon.cam_to_world[good:, :3, 3] += rng.normal(0, 1.0 / scale, (len(poses) - good, 3))
+        return recon
+
+    return run
+
+
+def test_a_small_inlier_consensus_withholds_metric_scale(scene):
+    """RANSAC reports the residual over its inliers, so a worse reconstruction can report a
+    better number: five agreeing cameras out of eight give 0.000 m while the rest are a metre
+    out. The count has to be gated too, or the alarm is loudest when it is least needed."""
+    raw, frames, indices, poses = scene
+    truth, _ = reconstruct(raw, frames, indices, mast3r=None)
+
+    _, report = reconstruct(
+        raw, frames, indices, mast3r=_mostly_wrong_mast3r(truth.points, poses, scale=3.0, good=4)
+    )
+
+    assert report["inliers"] < len(frames)
+    assert report["scale_source"] == "unscaled"
+    assert "cameras" in report["warning"]
+
+
+def test_a_refused_fit_keeps_the_lidar_cloud(tmp_path):
+    """A corridor walk cannot be fitted, but the LiDAR cloud is metric and gravity-aligned
+    on its own. Throwing it away would turn a partial result into no result."""
+    straight = np.tile(np.eye(4), (8, 1, 1))
+    straight[:, :3, 3] = np.c_[np.linspace(0, 6, 8), np.full(8, 1.4), np.zeros(8)]
+    raw, frames, indices, poses = _build_scene(tmp_path, straight)
+    truth, _ = reconstruct(raw, frames, indices, mast3r=None)
+
+    recon, report = reconstruct(
+        raw, frames, indices, mast3r=_stub_mast3r(truth.points, poses, scale=3.0)
+    )
+
+    assert len(recon.points) > 0
+    assert report["mast3r_points"] == 0
+    assert report["residual_m"] is None
+    assert "straight line" in report["warning"]
+    assert report["scale_source"] == "sensor"  # the sensor geometry is still metric
+
+
+def test_one_out_of_range_frame_does_not_abort_the_capture(scene):
+    """A real walk has frames pointed down a corridor or out of a window. Those contribute
+    nothing; they must not discard the frames that did see something."""
+    raw, frames, indices, _ = scene
+    cv2.imwrite(str(raw / "depth" / "000003.png"), np.full(DEPTH_SIZE[::-1], 9000, np.uint16))
+
+    recon, report = reconstruct(raw, frames, indices, mast3r=None)
+
+    assert len(recon.points) > 0
+    assert report["frames_without_depth"] == 1
+    assert len(recon.cam_to_world) == len(frames)  # the pose is still a camera
+
+
+def test_every_frame_out_of_range_is_still_refused(scene):
+    raw, frames, indices, _ = scene
+    for i in range(len(frames)):
+        cv2.imwrite(str(raw / "depth" / f"{i:06d}.png"), np.full(DEPTH_SIZE[::-1], 9000, np.uint16))
+
+    with pytest.raises(RuntimeError, match="in range"):
+        reconstruct(raw, frames, indices, mast3r=None)
+
+
+def test_the_clouds_are_compared_not_just_the_camera_paths(scene):
+    """The trajectory residual is computed from camera centres, which a wrong pose convention
+    and a wrong depth-intrinsics rescale both leave untouched. Comparing the two clouds is
+    what can see those."""
+    raw, frames, indices, poses = scene
+    truth, _ = reconstruct(raw, frames, indices, mast3r=None)
+
+    _, good = reconstruct(raw, frames, indices, mast3r=_stub_mast3r(truth.points, poses, scale=3.0))
+    assert good["cloud_agreement_m"] == pytest.approx(0.0, abs=0.05)
+    assert good["warning"] is None
+
+    displaced = _stub_mast3r(truth.points + np.array([1.5, 0.0, 0.0]), poses, scale=3.0)
+    _, bad = reconstruct(raw, frames, indices, mast3r=displaced)
+    assert bad["cloud_agreement_m"] > 0.5
+    assert "clouds" in bad["warning"]
+
+
+@pytest.mark.skipif(not FIXTURE.is_dir(), reason="fixture not generated")
+def test_a_downscaled_keyframe_does_not_shrink_the_room(tmp_path):
+    """odometry.csv quotes intrinsics in capture pixels. ingest caps the long side at
+    max_frame_side, so a capture wider than that arrives as smaller keyframes — and reading
+    the source resolution off the keyframe would then rescale by the wrong factor and yield a
+    plausible room of the wrong size, which is this project's top anti-goal."""
+    frames_dir = tmp_path / "frames"
+    frames_dir.mkdir()
+    for frame in sorted((FIXTURE / "frames").glob("*.jpg")):
+        image = cv2.imread(str(frame))
+        half = cv2.resize(image, (image.shape[1] // 2, image.shape[0] // 2))
+        cv2.imwrite(str(frames_dir / frame.name), half)
+
+    frames = sorted(frames_dir.glob("*.jpg"))
+    indices = [int(f.stem) for f in frames]
+    recon, _ = reconstruct(FIXTURE / "raw", frames, indices, mast3r=None, capture_size=(240, 180))
+
+    extent = recon.points.max(axis=0) - recon.points.min(axis=0)
+    np.testing.assert_allclose(sorted(extent), [2.6, 3.0, 4.0], atol=0.05)

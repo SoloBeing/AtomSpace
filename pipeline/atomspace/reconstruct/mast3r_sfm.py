@@ -112,7 +112,8 @@ def reconstruct(
             image_paths, pairs, str(cache_dir), None, subsample=SUBSAMPLE, desc_conf=DESC_CONF,
             lr1=LR_COARSE, niter1=ITERS_COARSE, lr2=LR_FINE, niter2=ITERS_FINE,
             device="cuda", opt_depth=True, shared_intrinsics=True, matching_conf_thr=0.0,
-            init=seed,
+            # Omitted entirely when empty, so the plain-video path calls exactly what it did.
+            **({"init": seed} if seed else {}),
         )
         log_vram("after alignment")
         pts3d, _, confs = scene.get_dense_pts3d(clean_depth=True)

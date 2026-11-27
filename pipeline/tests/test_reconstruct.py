@@ -75,6 +75,7 @@ def test_write_reconstruction(tmp_path):
     Image.new("RGB", (640, 360)).save(paths.frames / "00001.jpg")
     paths.scale.write_text("{}")
     paths.navmesh.write_text("{}")
+    (paths.recon / "world_up.json").write_text("{}")
 
     c2w = np.eye(4)
     c2w[:3, 3] = [1, 2, 3]
@@ -105,6 +106,9 @@ def test_write_reconstruction(tmp_path):
 
     assert not paths.scale.exists()
     assert not paths.navmesh.exists()
+    # Gravity belonged to the reconstruction that recorded it. Left behind, a later
+    # vision-only run would fix its floor normal to ARKit's +Y in MASt3R's arbitrary frame.
+    assert not (paths.recon / "world_up.json").exists()
 
 
 def test_each_image_is_encoded_once_however_many_pairs_it_is_in():

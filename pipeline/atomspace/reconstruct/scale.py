@@ -40,8 +40,8 @@ def metric_factor(paths: ScenePaths) -> tuple[float, str] | None:
     satisfied with the reconstruction: when the vision and sensor camera paths disagree too
     much, its report downgrades the scene to unscaled rather than let a navmesh be carved
     from geometry already measured as badly aligned. A fast-track scene with no report at
-    all was built by something that skips this stage, such as the ARKitScenes converter,
-    and is taken at its word.
+    all was built by something that writes a scene folder directly rather than running this
+    stage, and is taken at its word.
     """
     if paths.scale.exists():
         return load_reference(paths.scale).factor(), "user"

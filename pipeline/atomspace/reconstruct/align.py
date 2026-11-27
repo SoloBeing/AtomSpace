@@ -12,8 +12,10 @@ from dataclasses import dataclass
 import numpy as np
 
 MIN_POINTS = 3
-# Ratio of the trajectory's thinnest to thickest principal extent. A walk down a corridor
-# leaves rotation about the walking axis unconstrained, so a fit would be confident and wrong.
+# Ratio of the trajectory's second principal extent to its first. Three non-collinear
+# correspondences fix a similarity transform, so a flat loop is perfectly well conditioned —
+# only a path collapsing towards a single line is not. Comparing the *third* extent would
+# reject an ordinary walk at a steady height, which is the capture this track is built for.
 MIN_SPREAD = 0.05
 
 
@@ -102,7 +104,7 @@ def robust_similarity(
 
 def _refuse_degenerate(target: np.ndarray) -> None:
     singular = np.linalg.svd(target - target.mean(axis=0), compute_uv=False)
-    if singular[0] <= 0 or singular[-1] / singular[0] < MIN_SPREAD:
+    if singular[0] <= 0 or singular[1] / singular[0] < MIN_SPREAD:
         raise RuntimeError(
             "The camera path is too close to a straight line to fit a transform against. "
             "Capture a loop that covers the space rather than a single pass through it."

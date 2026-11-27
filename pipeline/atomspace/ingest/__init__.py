@@ -49,6 +49,12 @@ def run(video: Path, paths: ScenePaths, max_keyframes: int, cfg: IngestConfig = 
     candidates_dir = paths.frames / "candidates"
 
     if track is Track.FAST:
+        if recording is None:
+            raise RuntimeError(
+                f"{video} sits beside a sensor recording's sidecars but is not one itself. "
+                "Point at the recording folder (the one holding rgb.mp4 and odometry.csv), "
+                "not at a file inside it."
+            )
         candidates, source_index = _fast_candidates(recording, stored, candidates_dir, meta, cfg)
     else:
         candidates = extract_frames(stored, candidates_dir, min(cfg.extract_fps, meta.fps), cfg.max_frame_side)
@@ -98,8 +104,8 @@ def _fast_candidates(recording, stored: Path, candidates_dir: Path, meta, cfg):
         raise RuntimeError(
             f"This recording carries a {meta.rotation_deg} degree rotation flag, which ffmpeg "
             "applies to the extracted frames while odometry.csv's intrinsics and the depth maps "
-            "stay unrotated. Re-record without rotating the device mid-capture, or use the "
-            "plain-video track."
+            "stay in the sensor's own orientation, so the two would no longer line up. Use the "
+            "plain-video track for this capture, which handles rotation correctly."
         )
     stride = stride_for(meta.fps, cfg.extract_fps)
     pairs = extract_strided_frames(stored, candidates_dir, stride, cfg.max_frame_side)

@@ -10,6 +10,7 @@ from PIL import Image
 from atomspace import ingest
 from atomspace.config import ScenePaths
 from atomspace.ingest.probe import probe_video
+from atomspace.ingest import slice as slice_module
 from atomspace.ingest.slice import extract_strided_frames
 
 pytestmark = pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="needs ffmpeg")
@@ -177,3 +178,24 @@ def test_a_plain_video_still_takes_the_fallback_track(panning_video, tmp_path):
     data = json.loads(paths.ingest_meta.read_text())
     assert data["track"] == "fallback"
     assert "source_indices" not in data
+
+
+@needs_ffprobe
+def test_pointing_at_the_video_inside_a_recording_is_explained(tmp_path):
+    """`atomspace run myroom capture/rgb.mp4` is the natural variation of the documented
+    command, and it used to reach an AttributeError deep in the fast track."""
+    recording = _recording(tmp_path)
+    with pytest.raises(RuntimeError, match="folder"):
+        ingest.run(recording / "rgb.mp4", ScenePaths(tmp_path / "s"), max_keyframes=150)
+
+
+def test_an_ffmpeg_too_old_for_fps_mode_is_diagnosed(tmp_path, monkeypatch):
+    """-fps_mode arrived in ffmpeg 5.0, and env/environment.yml used to leave the version
+    open, so the whole fast track died on a raw 'Unrecognized option' complaint."""
+    class Failed:
+        returncode = 1
+        stderr = "Unrecognized option 'fps_mode'.\nError splitting the argument list."
+
+    monkeypatch.setattr(slice_module.subprocess, "run", lambda *a, **kw: Failed())
+    with pytest.raises(RuntimeError, match="ffmpeg 5"):
+        extract_strided_frames(tmp_path / "x.mp4", tmp_path / "out", stride=5, max_side=1920)

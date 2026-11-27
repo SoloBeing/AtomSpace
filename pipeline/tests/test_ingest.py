@@ -2,6 +2,8 @@ import json
 import shutil
 import subprocess
 
+import cv2
+import numpy as np
 import pytest
 from PIL import Image
 
@@ -84,3 +86,94 @@ def test_stride_of_one_keeps_every_frame(panning_video, tmp_path):
 def test_strided_extraction_caps_the_long_side(panning_video, tmp_path):
     got = extract_strided_frames(panning_video, tmp_path / "out", stride=20, max_side=320)
     assert max(Image.open(got[0][1]).size) == 320
+
+
+def _recording(tmp_path, frames=120, rotate=0, odometry_rows=None):
+    """A Stray Scanner folder: a real panning rgb.mp4 plus the sidecars for every frame."""
+    root = tmp_path / "capture"
+    (root / "depth").mkdir(parents=True)
+    (root / "confidence").mkdir()
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-f", "lavfi",
+         "-i", f"testsrc2=size=1280x720:rate=30:duration={frames / 30}",
+         "-vf", "crop=640:360:'min(t*150,640)':180", "-pix_fmt", "yuv420p",
+         str(root / "unrotated.mp4")],
+        check=True,
+    )
+    # A real Display Matrix, which is what probe.py reads; the legacy `rotate` tag is
+    # ignored by current ffmpeg, so writing one would test nothing.
+    subprocess.run(
+        ["ffmpeg", "-v", "error", *(["-display_rotation", str(rotate)] if rotate else []),
+         "-i", str(root / "unrotated.mp4"), "-c", "copy", str(root / "rgb.mp4")],
+        check=True,
+    )
+    (root / "unrotated.mp4").unlink()
+    header = ("timestamp, frame, x, y, z, qx, qy, qz, qw, fx, fy, cx, cy,"
+              " distortion_center_x, distortion_center_y\n")
+    rows = odometry_rows if odometry_rows is not None else frames
+    lines = [f"{i / 30:.4f}, {i:06d}, {i * 0.01}, 1.4, 0, 0, 0, 0, 1, 320, 320, 319.5, 179.5, ,\n"
+             for i in range(rows)]
+    (root / "odometry.csv").write_text(header + "".join(lines))
+    for i in range(rows):
+        cv2.imwrite(str(root / "depth" / f"{i:06d}.png"), np.full((24, 32), 2000, np.uint16))
+        cv2.imwrite(str(root / "confidence" / f"{i:06d}.png"), np.full((24, 32), 2, np.uint8))
+    return root
+
+
+@needs_ffprobe
+def test_ingest_of_a_recording_copies_sidecars_and_records_indices(tmp_path):
+    paths = ScenePaths(tmp_path / "scenes" / "room")
+
+    ingest.run(_recording(tmp_path), paths, max_keyframes=150)
+
+    data = json.loads(paths.ingest_meta.read_text())
+    assert data["track"] == "fast"
+    assert len(data["source_indices"]) == len(data["keyframes"])
+    assert data["source_indices"] == sorted(data["source_indices"])
+    assert (paths.raw / "odometry.csv").is_file()
+    assert (paths.raw / "depth").is_dir()
+    assert (paths.raw / "input.mp4").is_file()
+
+
+@needs_ffprobe
+def test_source_indices_are_multiples_of_the_stride(tmp_path):
+    """30 fps against a 6 fps target is a stride of 5, and index is position times stride."""
+    paths = ScenePaths(tmp_path / "scenes" / "room")
+    ingest.run(_recording(tmp_path), paths, max_keyframes=150)
+
+    indices = json.loads(paths.ingest_meta.read_text())["source_indices"]
+    assert all(i % 5 == 0 for i in indices)
+    assert max(indices) < 120
+
+
+@needs_ffprobe
+def test_every_keyframe_has_a_depth_frame_to_match(tmp_path):
+    """The point of carrying source indices: each one must name a file that exists."""
+    paths = ScenePaths(tmp_path / "scenes" / "room")
+    ingest.run(_recording(tmp_path), paths, max_keyframes=150)
+
+    data = json.loads(paths.ingest_meta.read_text())
+    for index in data["source_indices"]:
+        assert (paths.raw / "depth" / f"{index:06d}.png").is_file()
+
+
+@needs_ffprobe
+def test_ingest_refuses_a_rotated_recording(tmp_path):
+    with pytest.raises(RuntimeError, match="rotation"):
+        ingest.run(_recording(tmp_path, rotate=90), ScenePaths(tmp_path / "s"), max_keyframes=150)
+
+
+@needs_ffprobe
+def test_ingest_refuses_mismatched_frame_counts(tmp_path):
+    recording = _recording(tmp_path, frames=120, odometry_rows=40)
+    with pytest.raises(RuntimeError, match="odometry"):
+        ingest.run(recording, ScenePaths(tmp_path / "s"), max_keyframes=150)
+
+
+@needs_ffprobe
+def test_a_plain_video_still_takes_the_fallback_track(panning_video, tmp_path):
+    paths = ScenePaths(tmp_path / "scenes" / "pan")
+    ingest.run(panning_video, paths, max_keyframes=150)
+    data = json.loads(paths.ingest_meta.read_text())
+    assert data["track"] == "fallback"
+    assert "source_indices" not in data

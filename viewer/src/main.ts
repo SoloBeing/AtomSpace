@@ -6,6 +6,7 @@ import { mountRouteTool } from './admin/routeTool';
 import { mountScaleTool } from './admin/scaleTool';
 import { FirstPersonControls } from './controls/firstPerson';
 import { NavmeshGuard, toFloor } from './controls/navmeshGuard';
+import { WalkSounds } from './controls/sounds';
 import { isTouchDevice, mountTouchControls } from './controls/touch';
 import { Directions } from './nav/directions';
 import { Pathfinder, routeLength } from './nav/pathfinder';
@@ -33,6 +34,13 @@ async function start(app: HTMLElement, sceneName: string, admin: boolean) {
   loading.remove();
 
   const controls = new FirstPersonControls(viewer.camera, viewer.domElement);
+  const sounds = new WalkSounds();
+  controls.onStep = () => sounds.step();
+  controls.onJump = () => sounds.jump();
+  controls.onLand = () => sounds.land();
+  document.addEventListener('keydown', (event) => {
+    if (event.code === 'KeyM' && !(event.target instanceof HTMLInputElement)) sounds.muted = !sounds.muted;
+  });
   const touch = isTouchDevice();
   mountControlsHint(app, viewer.domElement, touch);
   if (touch) mountTouchControls(app, viewer.domElement, controls);

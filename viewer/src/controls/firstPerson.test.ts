@@ -64,6 +64,23 @@ describe('FirstPersonControls walking', () => {
     expect(controls.airborne(FRAME)).toBeLessThan(falling);
   });
 
+  it('sounds a footstep every 0.7 m and a jump and a landing', () => {
+    const controls = walker();
+    const heard: string[] = [];
+    controls.onStep = () => heard.push('step');
+    controls.onJump = () => heard.push('jump');
+    controls.onLand = () => heard.push('land');
+    for (let i = 0; i < 300; i++) controls.headBob(1.4 * FRAME, FRAME); // 7 m in 5 s
+    expect(heard.filter((h) => h === 'step')).toHaveLength(10);
+    heard.length = 0;
+    controls.jump();
+    for (let i = 0; i < 60; i++) {
+      controls.airborne(FRAME);
+      controls.headBob(1.4 * FRAME, FRAME); // no footsteps in the air
+    }
+    expect(heard.slice(0, heard.indexOf('land') + 1)).toEqual(['jump', 'land']); // steps resume only after landing
+  });
+
   it('bobs the head while walking and not when standing', () => {
     const controls = walker();
     expect(controls.headBob(0, FRAME).length()).toBe(0);

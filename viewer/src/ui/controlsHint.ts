@@ -7,6 +7,7 @@ const MOUSE_CONTROLS: [keys: string[], action: string][] = [
   [['W', 'A', 'S', 'D'], 'Walk'],
   [['Shift'], 'Sprint'],
   [['Space'], 'Jump'],
+  [['M'], 'Mute sounds'],
   [['Mouse'], 'Look'],
   [['Esc'], 'Free cursor'],
 ];

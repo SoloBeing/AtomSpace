@@ -27,6 +27,10 @@ export class FirstPersonControls {
   private jumpHeight = 0; // above the eye height of standing on the floor
   private jumpSpeed = 0;
   private readonly reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+  /** Hooks for sound: a foot landing while walking, leaving the floor, landing a jump. */
+  onStep?: () => void;
+  onJump?: () => void;
+  onLand?: () => void;
 
   private readonly onClick = () => {
     // Phones have no pointer lock, and on iPhones the method doesn't exist at all.
@@ -108,7 +112,9 @@ export class FirstPersonControls {
 
   /** Leaves the floor, unless already in the air. */
   jump(): void {
-    if (this.jumpHeight === 0 && this.jumpSpeed === 0) this.jumpSpeed = JUMP_SPEED_MPS;
+    if (this.jumpHeight !== 0 || this.jumpSpeed !== 0) return;
+    this.jumpSpeed = JUMP_SPEED_MPS;
+    this.onJump?.();
   }
 
   /** Height above standing eye height after this frame of a jump: a gravity arc, 0 on the floor. */
@@ -120,6 +126,7 @@ export class FirstPersonControls {
     if (this.jumpHeight <= 0) {
       this.jumpHeight = 0;
       this.jumpSpeed = 0;
+      this.onLand?.();
     }
     return this.jumpHeight;
   }
@@ -129,8 +136,13 @@ export class FirstPersonControls {
    * sway each stride, growing with speed so it fades out as walking eases to a stop.
    */
   headBob(walkedMeters: number, dtSeconds: number): THREE.Vector3 {
-    if (this.reducedMotion || dtSeconds <= 0 || this.jumpHeight > 0) return new THREE.Vector3(); // no footsteps in the air
-    this.stepPhase = (this.stepPhase + (walkedMeters / STEP_LENGTH_M) * Math.PI) % (2 * Math.PI);
+    if (dtSeconds <= 0 || this.jumpHeight > 0) return new THREE.Vector3(); // no footsteps in the air
+    const phase = this.stepPhase + (walkedMeters / STEP_LENGTH_M) * Math.PI;
+    // A foot lands at the bottom of each dip, where |sin| peaks: phase π/2, 3π/2.
+    const footfall = (p: number) => Math.floor(p / Math.PI + 0.5);
+    if (footfall(phase) > footfall(this.stepPhase)) this.onStep?.();
+    this.stepPhase = phase % (2 * Math.PI);
+    if (this.reducedMotion) return new THREE.Vector3();
     const strength = Math.min(walkedMeters / dtSeconds / WALK_SPEED_MPS, 1);
     const facing = this.camera.getWorldDirection(new THREE.Vector3()).setY(0).normalize();
     const right = new THREE.Vector3(-facing.z, 0, facing.x);

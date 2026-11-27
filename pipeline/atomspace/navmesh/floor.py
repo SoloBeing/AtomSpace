@@ -7,7 +7,8 @@ import numpy as np
 SAMPLE_POINTS = 50_000
 RANSAC_ITERS = 1000
 MAX_PLANES = 8
-INLIER_DIST_M = 0.02
+# MapAnything's floor is a few cm thick; at 2 cm it missed the 3% share and desk tops became the floor.
+INLIER_DIST_M = 0.05
 MIN_PLANE_SHARE = 0.03  # of the sampled points; anything smaller is furniture or noise
 MIN_UP_ALIGNMENT = 0.7  # |normal·up| of a horizontal plane; camera tilt can skew up_hint by ~35°, walls stay under this
 

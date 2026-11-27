@@ -45,6 +45,25 @@ describe('FirstPersonControls walking', () => {
     expect(speedAfter(side, 1)).toBeCloseTo(1.4 * 0.8, 2);
   });
 
+  it('jumps in an arc about 0.4 m high and lands back on the floor', () => {
+    const controls = walker();
+    controls.jump();
+    const heights = Array.from({ length: 90 }, () => controls.airborne(FRAME));
+    expect(Math.max(...heights)).toBeCloseTo(0.4, 1);
+    expect(heights.at(-1)).toBe(0);
+    controls.jump(); // can jump again once landed
+    expect(controls.airborne(FRAME)).toBeGreaterThan(0);
+  });
+
+  it('cannot jump again mid-air', () => {
+    const controls = walker();
+    controls.jump();
+    for (let i = 0; i < 20; i++) controls.airborne(FRAME); // past the top (~0.29 s)
+    const falling = controls.airborne(FRAME);
+    controls.jump();
+    expect(controls.airborne(FRAME)).toBeLessThan(falling);
+  });
+
   it('bobs the head while walking and not when standing', () => {
     const controls = walker();
     expect(controls.headBob(0, FRAME).length()).toBe(0);

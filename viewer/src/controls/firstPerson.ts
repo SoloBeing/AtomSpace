@@ -10,6 +10,9 @@ const EASE_SECONDS = 0.12; // speed reaches ~90% of the target in about 0.3 s, s
 const STEP_LENGTH_M = 0.7;
 const BOB_HEIGHT_M = 0.025; // up-down, twice per stride (every footstep)
 const BOB_SWAY_M = 0.012; // side to side, once per stride
+const GRAVITY_MPS2 = 9.81;
+const JUMP_HEIGHT_M = 0.4;
+const JUMP_SPEED_MPS = Math.sqrt(2 * GRAVITY_MPS2 * JUMP_HEIGHT_M);
 const MOUSE_SENSITIVITY = 0.002;
 const MAX_PITCH = Math.PI / 2 - 0.01;
 const MAX_STEP_SECONDS = 0.1; // after a stall, don't jump a long way in one frame
@@ -21,6 +24,8 @@ export class FirstPersonControls {
   private readonly stick = new THREE.Vector2();
   private readonly velocity = new THREE.Vector3();
   private stepPhase = 0;
+  private jumpHeight = 0; // above the eye height of standing on the floor
+  private jumpSpeed = 0;
   private readonly reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 
   private readonly onClick = () => {
@@ -36,6 +41,7 @@ export class FirstPersonControls {
   private readonly onKeyDown = (event: KeyboardEvent) => {
     if (event.target instanceof HTMLInputElement) return; // typing in the search bar isn't walking
     this.keys.add(event.code);
+    if (event.code === 'Space' && !event.repeat) this.jump();
   };
 
   private readonly onKeyUp = (event: KeyboardEvent) => {
@@ -96,6 +102,26 @@ export class FirstPersonControls {
   /** Forget any momentum, e.g. after a fly-to moved the camera for us. */
   stop(): void {
     this.velocity.set(0, 0, 0);
+    this.jumpHeight = 0;
+    this.jumpSpeed = 0;
+  }
+
+  /** Leaves the floor, unless already in the air. */
+  jump(): void {
+    if (this.jumpHeight === 0 && this.jumpSpeed === 0) this.jumpSpeed = JUMP_SPEED_MPS;
+  }
+
+  /** Height above standing eye height after this frame of a jump: a gravity arc, 0 on the floor. */
+  airborne(dtSeconds: number): number {
+    if (this.jumpSpeed === 0 && this.jumpHeight === 0) return 0;
+    const dt = Math.min(dtSeconds, MAX_STEP_SECONDS);
+    this.jumpHeight += this.jumpSpeed * dt - 0.5 * GRAVITY_MPS2 * dt * dt;
+    this.jumpSpeed -= GRAVITY_MPS2 * dt;
+    if (this.jumpHeight <= 0) {
+      this.jumpHeight = 0;
+      this.jumpSpeed = 0;
+    }
+    return this.jumpHeight;
   }
 
   /**
@@ -103,7 +129,7 @@ export class FirstPersonControls {
    * sway each stride, growing with speed so it fades out as walking eases to a stop.
    */
   headBob(walkedMeters: number, dtSeconds: number): THREE.Vector3 {
-    if (this.reducedMotion || dtSeconds <= 0) return new THREE.Vector3();
+    if (this.reducedMotion || dtSeconds <= 0 || this.jumpHeight > 0) return new THREE.Vector3(); // no footsteps in the air
     this.stepPhase = (this.stepPhase + (walkedMeters / STEP_LENGTH_M) * Math.PI) % (2 * Math.PI);
     const strength = Math.min(walkedMeters / dtSeconds / WALK_SPEED_MPS, 1);
     const facing = this.camera.getWorldDirection(new THREE.Vector3()).setY(0).normalize();

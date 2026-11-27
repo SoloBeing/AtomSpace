@@ -116,7 +116,7 @@ async function start(app: HTMLElement, sceneName: string, admin: boolean) {
     mountWorldsLink(app); // shares the top right corner with the admin panels
   }
 
-  const bob = new THREE.Vector3(); // head-bob offset currently baked into the camera position
+  const bob = new THREE.Vector3(); // head-bob + jump offset currently baked into the camera position
   viewer.onFrame((dt) => {
     if (flying) {
       bob.set(0, 0, 0); // flyTo owns the camera; a couple of cm left from the last step don't matter
@@ -134,6 +134,7 @@ async function start(app: HTMLElement, sceneName: string, admin: boolean) {
     } else {
       bob.set(0, 0, 0);
     }
+    bob.y += controls.airborne(dt); // after the move: tryMove resets the camera to eye height
     position.add(bob);
   });
 }

@@ -1,6 +1,9 @@
 import numpy as np
+import pytest
 
-from atomspace.navmesh.floor import fit_floor, world_from_floor
+from atomspace.navmesh.floor import (
+    fit_floor, floor_at_known_normal, world_from_floor,
+)
 
 Y = np.array([0.0, 1.0, 0.0])
 
@@ -50,3 +53,52 @@ def test_rough_up_hint_is_enough():
     points = _room(rng, n_walls=6000)
     restored = _floor_height_after_alignment(points, _random_rigid(rng), hint=tilted)
     assert np.abs(restored[:5000, 1]).max() < 0.02
+
+
+def _apply(plane, points):
+    world = world_from_floor(plane)
+    return points @ world[:3, :3].T + world[:3, 3]
+
+
+def test_known_normal_is_kept_exactly():
+    """Gravity is measured, not inferred, so noise on the floor points must not tilt it."""
+    rng = np.random.default_rng(3)
+    points = _room(rng)
+    points[:5000, 1] += rng.normal(0, 0.01, 5000)
+
+    plane = floor_at_known_normal(points, Y)
+
+    np.testing.assert_array_equal(plane.normal, Y)
+
+
+def test_known_normal_finds_the_lowest_horizontal_surface():
+    # Floor at 0, a table top at 0.75 and a ceiling at 2.6: the floor is the one wanted.
+    rng = np.random.default_rng(4)
+    restored = _apply(floor_at_known_normal(_room(rng), Y), _room(rng))
+    assert np.abs(restored[:5000, 1]).max() < 0.03
+
+
+def test_known_normal_survives_an_unnormalised_direction():
+    rng = np.random.default_rng(5)
+    plane = floor_at_known_normal(_room(rng), Y * 7.0)
+    np.testing.assert_allclose(plane.normal, Y)
+
+
+def test_a_sparsely_seen_floor_is_still_found():
+    """300 floor points under 8000 of wall: far too few to be a plane the SVD would pick out
+    of that, but enough to be the lowest surface once gravity has settled the orientation.
+    Height still has to be discovered from floor points, so this does not rescue a capture
+    that never looked down at all."""
+    rng = np.random.default_rng(6)
+    points = _room(rng, n_floor=300, n_walls=8000)
+    pose = _random_rigid(rng)
+    moved = points @ pose[:3, :3].T + pose[:3, 3]
+
+    gravity = _apply(floor_at_known_normal(moved, pose[:3, :3] @ Y), moved)
+
+    assert np.abs(gravity[:300, 1]).max() < 0.05
+
+
+def test_known_normal_raises_without_a_populated_surface():
+    with pytest.raises(RuntimeError, match="floor"):
+        floor_at_known_normal(np.zeros((2, 3)), Y)

@@ -27,13 +27,20 @@ VOXEL_FRACTION = 0.005  # dedupe voxel = this fraction of the median camera-to-p
 SUBSAMPLE, DESC_CONF = 8, "desc_conf"
 
 
-def reconstruct(frames: list[Path], profile: Profile, cache_dir: Path) -> Reconstruction:
+def reconstruct(
+    frames: list[Path], profile: Profile, cache_dir: Path,
+    init: dict[str, dict[str, np.ndarray]] | None = None,
+) -> Reconstruction:
     """Runs MASt3R-SfM on the keyframes.
 
     Pair graph: each frame is paired with its `profile.pair_window` temporal neighbours plus
     `profile.pair_retrieval_k` retrieval matches (retrieval checkpoint + ASMK), which keeps
     memory roughly linear in frame count. Then sparse global alignment
     (mast3r.cloud_opt.sparse_ga) solves poses, intrinsics and dense depth.
+
+    `init` seeds the optimiser per image, keyed by image path; see sensor_track.mast3r_init
+    for what it may contain. Arrays are handed over as tensors because sparse_scene_optimizer
+    calls `.detach()` on them.
 
     Output is up-to-scale; metric scale is applied later from the user's reference.
     """
@@ -94,10 +101,19 @@ def reconstruct(frames: list[Path], profile: Profile, cache_dir: Path) -> Recons
             raise RuntimeError(f"Only {len(cached)} of {len(pairs)} pairs are in the match cache.")
 
         # One phone lens with focus locked during capture, so all frames share intrinsics.
+        seed = {
+            path: {key: torch.as_tensor(value, dtype=torch.float32, device="cuda")
+                   for key, value in entries.items()}
+            for path, entries in (init or {}).items()
+        }
+        if seed:
+            print(f"MASt3R: seeding {len(seed)} images with measured intrinsics")
         scene = sparse_global_alignment(
             image_paths, pairs, str(cache_dir), None, subsample=SUBSAMPLE, desc_conf=DESC_CONF,
             lr1=LR_COARSE, niter1=ITERS_COARSE, lr2=LR_FINE, niter2=ITERS_FINE,
             device="cuda", opt_depth=True, shared_intrinsics=True, matching_conf_thr=0.0,
+            # Omitted entirely when empty, so the plain-video path calls exactly what it did.
+            **({"init": seed} if seed else {}),
         )
         log_vram("after alignment")
         pts3d, _, confs = scene.get_dense_pts3d(clean_depth=True)
@@ -252,6 +268,26 @@ def to_original_pixels(K: np.ndarray, original_size: tuple[int, int]) -> np.ndar
     out[1, 1] = K[1, 1] / sy
     out[0, 2] = (K[0, 2] + left + 0.5) / sx - 0.5
     out[1, 2] = (K[1, 2] + top + 0.5) / sy - 0.5
+    return out
+
+
+def to_network_pixels(K: np.ndarray, original_size: tuple[int, int]) -> np.ndarray:
+    """The inverse of to_original_pixels: a keyframe's own intrinsics at the network's input
+    resolution, which is the frame `sparse_scene_optimizer` reads `init['intrinsics']` in."""
+    w0, h0 = original_size
+    s = MAST3R_IMAGE_SIZE / max(w0, h0)
+    w, h = round(w0 * s), round(h0 * s)
+    half_w = ((2 * (w // 2)) // PATCH_SIZE) * PATCH_SIZE / 2
+    half_h = ((2 * (h // 2)) // PATCH_SIZE) * PATCH_SIZE / 2
+    if w == h:
+        half_h = 3 * half_w / 4
+    left, top = w // 2 - half_w, h // 2 - half_h
+    sx, sy = w / w0, h / h0
+    out = np.eye(3)
+    out[0, 0] = K[0, 0] * sx
+    out[1, 1] = K[1, 1] * sy
+    out[0, 2] = (K[0, 2] + 0.5) * sx - 0.5 - left
+    out[1, 2] = (K[1, 2] + 0.5) * sy - 0.5 - top
     return out
 
 

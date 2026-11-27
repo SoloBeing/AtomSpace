@@ -34,9 +34,20 @@ def load_reference(path: Path) -> ScaleReference:
 
 
 def metric_factor(paths: ScenePaths) -> tuple[float, str] | None:
-    """Recon-to-meters factor and its source, or None if the scene isn't metric yet."""
+    """Recon-to-meters factor and its source, or None if the scene isn't metric yet.
+
+    A sensor-track scene is metric because ARKit's poses are, but only if that stage was
+    satisfied with the reconstruction: when the vision and sensor camera paths disagree too
+    much, its report downgrades the scene to unscaled rather than let a navmesh be carved
+    from geometry already measured as badly aligned. A fast-track scene with no report at
+    all was built by something that writes a scene folder directly rather than running this
+    stage, and is taken at its word.
+    """
     if paths.scale.exists():
         return load_reference(paths.scale).factor(), "user"
     if paths.ingest_meta.exists() and json.loads(paths.ingest_meta.read_text())["track"] == "fast":
+        report = paths.logs / "sensor_track.json"
+        if report.exists() and json.loads(report.read_text()).get("scale_source") != "sensor":
+            return None
         return 1.0, "sensor"
     return None

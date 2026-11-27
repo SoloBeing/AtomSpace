@@ -206,3 +206,58 @@ def test_run_end_to_end_from_recon_space(tmp_path):
     assert np.all(vertices[:, 1] == 0)
     triangles = np.array([p["v"] for p in mesh["polygons"]])
     _assert_margin_is_tight(vertices, triangles)
+
+
+def _tilted_fast_scene(tmp_path, write_world_up: bool):
+    """A room whose recon frame is rolled 12 degrees, with gravity recorded (or not). The
+    floor points are deliberately sparse under a lot of wall, which is where a point fit
+    drifts and a measured up direction does not."""
+    roll = np.radians(12)
+    rotation = np.array([
+        [1, 0, 0],
+        [0, np.cos(roll), -np.sin(roll)],
+        [0, np.sin(roll), np.cos(roll)],
+    ])
+    points = _walled_room()
+    paths = ScenePaths(tmp_path / "scene")
+    paths.ensure()
+    write_ply(paths.recon / "dense_points.ply", (points @ rotation.T).astype(np.float32),
+              np.zeros((len(points), 3), np.uint8))
+    paths.ingest_meta.write_text(json.dumps({"track": "fast", "keyframes": ["00001.jpg"]}))
+    (paths.logs / "sensor_track.json").write_text(json.dumps({"scale_source": "sensor"}))
+
+    cameras = np.c_[np.linspace(1, 4, 12), np.full(12, 1.5), np.full(12, 2.0)] @ rotation.T
+    frames = [{"transform_matrix": _looking_down_from(c).tolist()} for c in cameras]
+    paths.transforms.write_text(json.dumps({"frames": frames}))
+    if write_world_up:
+        (paths.recon / "world_up.json").write_text(json.dumps({"world_up": list(rotation @ [0, 1, 0])}))
+    return paths, rotation
+
+
+def _looking_down_from(centre):
+    """An OpenGL camera pose at `centre` with an up axis that is deliberately unhelpful."""
+    pose = np.eye(4)
+    pose[:3, 3] = centre
+    return pose
+
+
+def test_navmesh_prefers_recorded_gravity_over_a_point_fit(tmp_path):
+    """The recorded direction is deliberately 3 degrees off the synthetic floor, which is
+    perfectly planar and which a point fit therefore recovers exactly. If world_up.json is
+    being read, the world rotation follows the recorded direction and not the fit."""
+    paths, rotation = _tilted_fast_scene(tmp_path, write_world_up=False)
+    nudge = np.radians(3)
+    recorded = rotation @ [0.0, np.cos(nudge), np.sin(nudge)]
+    (paths.recon / "world_up.json").write_text(json.dumps({"world_up": list(recorded)}))
+
+    navmesh.run(paths, CFG)
+
+    world = np.array(json.loads(paths.world.read_text())["world_from_recon"]).reshape(4, 4).T
+    recovered_up = np.linalg.inv(world[:3, :3])[:, 1]
+    np.testing.assert_allclose(recovered_up, recorded, atol=1e-9)
+
+
+def test_navmesh_still_fits_the_floor_without_recorded_gravity(tmp_path):
+    paths, _ = _tilted_fast_scene(tmp_path, write_world_up=False)
+    navmesh.run(paths, CFG)
+    assert paths.navmesh.exists()

@@ -9,6 +9,7 @@ RANSAC_ITERS = 1000
 MAX_PLANES = 8
 INLIER_DIST_M = 0.02
 MIN_PLANE_SHARE = 0.03  # of the sampled points; anything smaller is furniture or noise
+MIN_BAND_SHARE = 0.05  # of the densest height band, when the up direction is already known
 MIN_UP_ALIGNMENT = 0.7  # |normal·up| of a horizontal plane; camera tilt can skew up_hint by ~35°, walls stay under this
 
 
@@ -53,6 +54,34 @@ def fit_floor(points: np.ndarray, up_hint: np.ndarray, seed: int = 0) -> FloorPl
     if not horizontal:
         raise RuntimeError("No floor found: the capture needs more of the floor in view.")
     return min(horizontal, key=lambda p: -p.offset * (p.normal @ up))
+
+
+def floor_at_known_normal(points: np.ndarray, normal: np.ndarray) -> FloorPlane:
+    """The floor plane when the up direction is already known, as it is on the sensor track.
+
+    ARKit reports gravity, so only the floor's height is left to find. `fit_floor` would
+    solve the normal from the points as well, and a sparse floor under a lot of wall lets
+    that tilt the whole world — which the ankle-to-head occupancy slabs are sensitive to.
+
+    Heights along `normal` are histogrammed at the plane-fit tolerance, and the lowest bin
+    holding a real surface's worth of points is the floor. Expects points in meters.
+    """
+    up = normal / np.linalg.norm(normal)
+    heights = points @ up
+    edges = np.arange(heights.min(), heights.max() + 2 * INLIER_DIST_M, INLIER_DIST_M)
+    counts, _ = np.histogram(heights, bins=edges)
+    # Measured against the densest band rather than the whole cloud: a floor glimpsed
+    # briefly under a lot of wall is a small share of the points but still a real surface,
+    # whereas a wall spreads itself thinly across every band it crosses.
+    surfaces = np.flatnonzero(counts >= max(3, MIN_BAND_SHARE * counts.max()))
+    if not len(surfaces):
+        raise RuntimeError("No floor found: the capture needs more of the floor in view.")
+
+    # Centre of mass of the lowest populated band, so the plane sits on the points rather
+    # than on a bin edge.
+    low, high = edges[surfaces[0]], edges[surfaces[0] + 1]
+    band = heights[(heights >= low) & (heights < high)]
+    return FloorPlane(up, float(-band.mean()))
 
 
 def _ransac_inliers(points: np.ndarray, rng: np.random.Generator) -> np.ndarray:

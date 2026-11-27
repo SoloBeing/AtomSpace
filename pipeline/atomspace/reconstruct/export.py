@@ -47,7 +47,8 @@ def write_reconstruction(recon: Reconstruction, paths: ScenePaths) -> None:
 
     # A new reconstruction has its own arbitrary frame, so a scale reference picked in the old one
     # is wrong, and so is everything derived from it.
-    stale = [p for p in (paths.scale, paths.world, paths.navmesh) if p.exists()]
+    stale = [p for p in (paths.scale, paths.world, paths.navmesh,
+                         paths.recon / "world_up.json") if p.exists()]
     for p in stale:
         p.unlink()
     if stale:

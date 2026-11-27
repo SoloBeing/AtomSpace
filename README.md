@@ -74,7 +74,34 @@ atomspace scale myroom --a 0.1 0.0 2.3 --b 0.1 1.1 2.3 --distance 2.0
 atomspace navmesh myroom && atomspace bundle myroom
 ```
 
-`--a` and `--b` are two points in reconstruction space, and `--distance` is their real separation in metres. The viewer's scale tool (`&admin`) picks them by clicking. Each stage reruns on its own: `atomspace {ingest,reconstruct,splat,scale,navmesh,bundle} <scene>`.
+`--a` and `--b` are two points in reconstruction space, and `--distance` is their real separation in metres. A LiDAR capture needs none of this — see below. The viewer's scale tool (`&admin`) picks them by clicking. Each stage reruns on its own: `atomspace {ingest,reconstruct,splat,scale,navmesh,bundle} <scene>`.
+
+## Capture with LiDAR instead
+
+If someone on the team has an iPhone with LiDAR, [Stray Scanner](https://apps.apple.com/us/app/stray-scanner/id1557051662)
+(free, iOS 18.6+) records ARKit's camera path and the sensor's depth alongside the video.
+Those poses are already in metres and already square with gravity, so the scene comes out
+metric with no scale step at all, and the geometry within the sensor's reach is measured
+rather than inferred.
+
+Copy the recording folder off the phone and hand it to the same command:
+
+```bash
+atomspace run myroom path/to/<recording-folder>   # the folder with rgb.mp4 and odometry.csv
+atomspace navmesh myroom && atomspace bundle myroom
+```
+
+MASt3R still runs: the LiDAR only reaches about 5 m, so it covers the near field while
+vision fills in the far walls and high ceilings. The two reconstructions are then fitted
+against each other, and the run prints how far apart the camera paths ended up. If they
+disagree by more than 15 cm the scene is deliberately left unscaled rather than labelled
+metric, and you can either recapture or set a scale reference by hand.
+
+Plain phone video keeps working exactly as before, and is still the way to capture on any
+other device. Two caveats on the sensor path: ingest and reconstruct have to run on the same
+machine, because `scenes/*/raw/` is gitignored and the sidecars live there; and a recording
+made while the phone rotated mid-capture is refused, since the rotation would be applied to
+the frames but not to the depth maps.
 
 ## Controls
 

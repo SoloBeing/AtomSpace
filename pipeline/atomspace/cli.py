@@ -56,7 +56,9 @@ def cmd_bundle(args: argparse.Namespace) -> None:
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(prog="atomspace", description="Video to 3D indoor scene bundle.")
+    parser = argparse.ArgumentParser(
+        prog="atomspace", description="Phone video or a LiDAR recording to a 3D indoor scene bundle."
+    )
     parser.add_argument("--scenes-root", default="scenes", help="folder holding one subfolder per scene")
     parser.add_argument("--profile", choices=sorted(PROFILES), help="override the auto-detected VRAM profile")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -65,7 +67,7 @@ def main(argv: list[str] | None = None) -> None:
         p = sub.add_parser(name, help=help)
         p.add_argument("scene", help="scene name (folder under --scenes-root)")
         if video:
-            p.add_argument("video", help="path to the captured .mp4/.mov")
+            p.add_argument("video", help="the captured .mp4/.mov, or a Stray Scanner recording folder")
         p.set_defaults(fn=fn)
         return p
 

@@ -65,11 +65,13 @@ def _float_or_none(value: str | None) -> float | None:
         return None
 
 
-def probe_video(video: Path) -> VideoMeta:
+def probe_video(video: Path, recording: "Recording | None" = None) -> VideoMeta:
     """Reads container metadata with ffprobe.
 
     Plain .mp4 files never carry AR poses or depth; those come from capture apps that
     export sidecar files next to the video, so has_ar_poses/has_depth check for them.
+    `recording`, when given, is an already-identified Stray Scanner folder and answers both
+    questions directly, which is what the fast track routes on.
     """
     info = _ffprobe(video)
     stream = next((s for s in info.get("streams", []) if s.get("codec_type") == "video"), None)
@@ -96,6 +98,6 @@ def probe_video(video: Path) -> VideoMeta:
         device_make=_tag(tags, "make", "manufacturer"),
         device_model=_tag(tags, ".model"),
         focal_length_35mm=_float_or_none(_tag(tags, "35mm_equivalent")),
-        has_ar_poses=(video.parent / "odometry.csv").is_file(),
-        has_depth=(video.parent / "depth").is_dir(),
+        has_ar_poses=recording is not None or (video.parent / "odometry.csv").is_file(),
+        has_depth=(recording.depth is not None) if recording else (video.parent / "depth").is_dir(),
     )

@@ -7,8 +7,10 @@ from PIL import Image
 from atomspace.config import ScenePaths
 from atomspace.reconstruct.export import Reconstruction, read_ply, write_reconstruction
 from atomspace.reconstruct.mast3r_sfm import (
-    cache_encoder, faster_nn_search, nearest_in_blocks, pair_graph, to_original_pixels, voxel_downsample,
+    cache_encoder, faster_nn_search, nearest_in_blocks, pair_graph, to_network_pixels,
+    to_original_pixels, voxel_downsample,
 )
+from atomspace.reconstruct.sensor_track import mast3r_init
 
 
 def _connected(n, edges):
@@ -73,6 +75,7 @@ def test_write_reconstruction(tmp_path):
     Image.new("RGB", (640, 360)).save(paths.frames / "00001.jpg")
     paths.scale.write_text("{}")
     paths.navmesh.write_text("{}")
+    (paths.recon / "world_up.json").write_text("{}")
 
     c2w = np.eye(4)
     c2w[:3, 3] = [1, 2, 3]
@@ -103,6 +106,9 @@ def test_write_reconstruction(tmp_path):
 
     assert not paths.scale.exists()
     assert not paths.navmesh.exists()
+    # Gravity belonged to the reconstruction that recorded it. Left behind, a later
+    # vision-only run would fix its floor normal to ARKit's +Y in MASt3R's arbitrary frame.
+    assert not (paths.recon / "world_up.json").exists()
 
 
 def test_each_image_is_encoded_once_however_many_pairs_it_is_in():
@@ -179,3 +185,33 @@ def test_faster_search_leaves_every_match_unchanged(monkeypatch):
     after = fast_nn.fast_reciprocal_NNs(pts1, pts2, **kw)
     for b, a in zip(before, after):
         np.testing.assert_array_equal(a, b)
+
+
+def test_network_pixels_round_trip_to_original():
+    """init['intrinsics'] is read at MASt3R's network input resolution, while odometry.csv
+    quotes the colour frame, so the mapping has to invert to_original_pixels exactly."""
+    for size in [(1920, 1440), (1000, 700), (800, 800), (1440, 1920)]:
+        K = np.array([[1500.0, 0, (size[0] - 1) / 2], [0, 1500.0, (size[1] - 1) / 2], [0, 0, 1]])
+        np.testing.assert_allclose(to_original_pixels(to_network_pixels(K, size), size), K, atol=1e-9)
+
+
+def test_network_pixels_scales_the_focal_to_the_long_side():
+    K = np.array([[1500.0, 0, 959.5], [0, 1500.0, 719.5], [0, 0, 1]])
+    out = to_network_pixels(K, (1920, 1440))
+    np.testing.assert_allclose(out[0, 0], 1500.0 * 512 / 1920)
+
+
+def test_mast3r_init_offers_only_what_sparse_ga_accepts(tmp_path):
+    """cam2w reaches `assert False, 'inverse kinematic chain not yet implemented'` in
+    sparse_ga.py, and depthmap wants a per-anchor vector the caller cannot know, so
+    intrinsics is the only key that may appear."""
+    frames = [tmp_path / f"{i:05d}.jpg" for i in range(3)]
+    for frame in frames:
+        Image.new("RGB", (1920, 1440)).save(frame)
+    intrinsics = np.tile(np.array([[1500.0, 0, 959.5], [0, 1500.0, 719.5], [0, 0, 1]]), (3, 1, 1))
+
+    init = mast3r_init(frames, intrinsics)
+
+    assert set(init) == {str(f) for f in frames}
+    assert all(set(entry) == {"intrinsics"} for entry in init.values())
+    np.testing.assert_allclose(init[str(frames[0])]["intrinsics"][0, 0], 1500.0 * 512 / 1920)

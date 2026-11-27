@@ -7,6 +7,6 @@ dependencies:
   - pip
   - cmake
   - cython
-  - ffmpeg
+  - ffmpeg>=5  # -fps_mode, which the sensor track needs for exact frame indexing
   - faiss-cpu
   - cuda-toolkit=12.8

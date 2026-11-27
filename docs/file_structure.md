@@ -19,6 +19,7 @@ AtomSpace/
 │
 ├── docs/images/                  # README figures
 ├── test/testroom/frames/         # sample data: 101 keyframes, see test/README.md
+├── test/strayroom/               # synthetic Stray Scanner recording, generated, ours
 │
 ├── third_party/
 │   └── mast3r/                   # git submodule (includes dust3r)
@@ -34,23 +35,29 @@ AtomSpace/
 │   │   ├── bundle.py             # writes manifest.json, validates bundle against schemas/
 │   │   ├── ingest/
 │   │   │   ├── probe.py          # ffprobe metadata + sensor sidecar detection
-│   │   │   ├── route.py          # fallback (default) vs fast track
-│   │   │   ├── slice.py          # ffmpeg frame extraction
+│   │   │   ├── stray.py          # Stray Scanner recordings: odometry, depth, confidence
+│   │   │   ├── route.py          # fallback vs fast track, stride, frame/odometry reconciling
+│   │   │   ├── slice.py          # ffmpeg frame extraction, by time or by frame index
 │   │   │   ├── blur.py           # Laplacian-variance sharpness filter
 │   │   │   └── dedupe.py         # motion-based keyframe selection, capped by profile
 │   │   ├── reconstruct/
 │   │   │   ├── mast3r_sfm.py     # MASt3R-SfM with sparse pair graph
-│   │   │   ├── sensor_track.py   # fast track: ARKit/ARCore poses + LiDAR depth
+│   │   │   ├── sensor_track.py   # fast track: ARKit poses + LiDAR depth, merged with MASt3R
+│   │   │   ├── lidar.py          # depth unprojection, intrinsics rescale, point colours
+│   │   │   ├── align.py          # Umeyama + RANSAC similarity between two trajectories
 │   │   │   ├── export.py         # Reconstruction → transforms.json + dense_points.ply
 │   │   │   └── scale.py          # user scale reference → recon-to-meters factor
 │   │   ├── splat/
 │   │   │   ├── train.py          # gsplat training within profile limits
 │   │   │   └── compress.py       # 3DGS .ply → web .splat
 │   │   └── navmesh/
-│   │       ├── floor.py          # RANSAC floor + align to +Y up
+│   │       ├── floor.py          # RANSAC floor, or a known gravity normal; align to +Y up
 │   │       ├── obstacles.py      # occupancy grid between ankle and head height
 │   │       └── polygonize.py     # 0.25 m erosion → outlines → triangles → navmesh dict
-│   └── tests/                    # blur, dedupe, floor, gpu, ingest, navmesh, reconstruct, splat
+│   ├── scripts/
+│   │   └── make_stray_fixture.py  # writes test/strayroom/
+│   └── tests/                    # align, blur, dedupe, floor, gpu, ingest, lidar,
+│                                 # navmesh, reconstruct, route, sensor_track, splat, stray
 │
 ├── viewer/                       # Three.js web client (runs on any machine)
 │   ├── package.json              # three, @mkkellogg/gaussian-splats-3d, fuse.js, vite
@@ -87,12 +94,13 @@ AtomSpace/
 │
 ├── scenes/worlds.json            # the worlds offered in the carousel
 ├── scenes/<name>/                # one folder per captured space
-│   ├── ingest.json               # video metadata, track, keyframe list
-│   ├── raw/                      # input video                               (gitignored)
+│   ├── ingest.json               # video metadata, track, keyframes, source_indices
+│   ├── raw/                      # input video + sensor sidecars          (gitignored)
 │   ├── frames/                   # keyframes                                 (gitignored)
 │   ├── recon/                    # transforms.json, dense_points.ply (LFS), scale.json,
-│   │                             # world.json; everything else here is gitignored
-│   ├── logs/                     # per-stage duration + peak VRAM            (gitignored)
+│   │                             # world.json, world_up.json; everything else gitignored
+│   ├── logs/                     # per-stage duration + peak VRAM, plus   (gitignored)
+│   │                            # sensor_track.json on the fast track
 │   └── bundle/                   # what the viewer loads
 │       ├── manifest.json
 │       ├── scene.splat
